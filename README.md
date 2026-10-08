@@ -1,2 +1,3 @@
 # PHP-MINI-PROJECT
 FORUM OR DISCUSSION BOARD  
+hi, i am Aditya
