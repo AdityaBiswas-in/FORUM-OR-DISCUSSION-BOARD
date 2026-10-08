@@ -3,7 +3,6 @@
 $recentDiscussions = get_recent_discussions(5);
 ?>
 <aside class="sidebar-right">
-  <!-- Recent Discussions Card matching Reference Screenshot -->
   <div class="recent-discussions-card">
     <h3 class="recent-card-header">Recent Discussions</h3>
     <div class="recent-discussions-list">

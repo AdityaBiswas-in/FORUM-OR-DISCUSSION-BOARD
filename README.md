@@ -1,3 +1,8 @@
 # PHP-MINI-PROJECT
+<<<<<<< HEAD
 
 FORUM OR DISCUSSION BOARD
+=======
+FORUM OR DISCUSSION BOARD  
+hi, i am Aditya
+>>>>>>> c496167e857ba3f42addc206912702ff9ceb3ed2
