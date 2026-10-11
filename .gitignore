@@ -7,6 +7,12 @@ assets/uploads/
 assets/uploads/*
 uploads/
 
+# Images & media assets
+/assets/images/
+assets/images/
+assets/images/*
+images/
+
 # Environment & temporary files
 .env
 *.log
