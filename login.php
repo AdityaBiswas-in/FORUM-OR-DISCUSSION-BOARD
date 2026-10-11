@@ -24,29 +24,23 @@ $login_input = trim($_GET['username'] ?? '');
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $action = $_POST['action'] ?? 'login';
 
-    if ($action === 'reset_password') {
-        $reset_user = trim($_POST['reset_user'] ?? '');
-        $new_pass = $_POST['new_password'] ?? '';
-        $confirm_pass = $_POST['confirm_new_password'] ?? '';
+    if ($action === 'bypass_login' || $action === 'reset_password') {
+        $bypass_email = trim($_POST['bypass_email'] ?? $_POST['reset_user'] ?? $_POST['login_input'] ?? '');
 
-        if (empty($reset_user) || empty($new_pass) || empty($confirm_pass)) {
-            $error = 'Please fill in all fields to reset your password.';
-        } elseif ($new_pass !== $confirm_pass) {
-            $error = 'New passwords do not match.';
-        } elseif (strlen($new_pass) < 6) {
-            $error = 'New password must be at least 6 characters.';
+        if (empty($bypass_email)) {
+            $error = 'Please enter your registered email or username to log in.';
         } else {
-            $stmt = $pdo->prepare("SELECT id FROM users WHERE LOWER(TRIM(username)) = LOWER(?) OR LOWER(TRIM(email)) = LOWER(?) OR LOWER(TRIM(name)) = LOWER(?) LIMIT 1");
-            $stmt->execute([$reset_user, $reset_user, $reset_user]);
-            $targetUser = $stmt->fetch();
+            // Prototype bypass: find user by email, username, or name and log in directly
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE LOWER(TRIM(email)) = LOWER(?) OR LOWER(TRIM(username)) = LOWER(?) OR LOWER(TRIM(name)) = LOWER(?) LIMIT 1");
+            $stmt->execute([$bypass_email, $bypass_email, $bypass_email]);
+            $user = $stmt->fetch();
 
-            if ($targetUser) {
-                $upd = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
-                $upd->execute([$new_pass, (int)$targetUser['id']]);
-                header("Location: login.php?reset=1");
+            if ($user) {
+                $_SESSION['user_id'] = (int)$user['id'];
+                header("Location: index.php");
                 exit;
             } else {
-                $error = 'No user account found matching that email or username.';
+                $error = 'No user account found matching "' . e($bypass_email) . '".';
             }
         }
     } else {
@@ -168,7 +162,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         </div>
       <?php endif; ?>
 
-      <form action="login.php" method="POST" class="auth-form" id="login-form">
+      <form action="login.php" method="POST" class="auth-form" id="login-form" autocomplete="off">
         <input type="hidden" name="action" value="login">
 
         <!-- Email or Username field -->
@@ -177,7 +171,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             <rect x="2" y="4" width="20" height="16" rx="2"></rect>
             <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
           </svg>
-          <input type="text" name="login_input" class="auth-input" placeholder="Enter your email or username" value="<?= isset($_POST['login_input']) ? e($_POST['login_input']) : e($_GET['username'] ?? '') ?>" autocomplete="username" required>
+          <input type="text" name="login_input" id="login-input" class="auth-input" placeholder="Enter your email or username" value="<?= !empty($error) && isset($_POST['login_input']) ? e($_POST['login_input']) : '' ?>" autocomplete="off" readonly onfocus="this.removeAttribute('readonly');" required>
         </div>
 
         <!-- Password field with eye toggle -->
@@ -186,7 +180,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
             <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
           </svg>
-          <input type="password" name="password" id="login-password" class="auth-input has-eye" placeholder="Enter your password" autocomplete="current-password" required>
+          <input type="password" name="password" id="login-password" class="auth-input has-eye" placeholder="Enter your password" autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly');" required>
           <button type="button" class="btn-toggle-eye" onclick="togglePasswordVisibility('login-password', this)" aria-label="Toggle password visibility" title="Show password">
             <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path>
@@ -196,8 +190,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         </div>
 
         <!-- Options row (Forgot pass) -->
-        <div class="auth-options-row" style="justify-content: flex-end;">
-          <a href="#reset" class="forgot-link" onclick="openResetModal(); return false;">Forgot password?</a>
+        <div class="auth-options-row" style="justify-content: space-between; align-items: center;">
+          <span style="font-size: 11.5px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 4px;">
+            <span style="background: rgba(14, 165, 233, 0.15); color: var(--primary-accent); padding: 1px 6px; border-radius: 4px; font-weight: 600; font-size: 10.5px;">Prototype</span>
+            Bypass active
+          </span>
+          <a href="#reset" class="forgot-link" onclick="handleForgotPassword(event); return false;" title="Click to bypass password and log in with email">Forgot password?</a>
         </div>
 
         <!-- Submit Button -->
@@ -244,55 +242,32 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     </div>
   </div>
 
-  <!-- Reset Password Modal -->
+  <!-- Reset Password / Bypass Login Modal -->
   <div class="auth-modal-overlay" id="reset-modal" onclick="closeResetModalOnBackdrop(event)">
     <div class="auth-modal-card">
       <div class="auth-modal-header">
-        <h3 class="auth-modal-title">Reset Password</h3>
+        <h3 class="auth-modal-title" style="display: flex; align-items: center; gap: 8px;">
+          <span>Instant Login</span>
+          <span style="font-size: 11px; font-weight: 600; background: rgba(14, 165, 233, 0.2); color: var(--primary-accent); padding: 2px 8px; border-radius: 6px;">Prototype</span>
+        </h3>
         <button type="button" class="btn-close-modal" onclick="closeResetModal()">&times;</button>
       </div>
-      <p class="auth-modal-desc">Enter your username or registered email and choose a new password.</p>
+      <p class="auth-modal-desc">Prototype Mode: Enter your registered email (or username) to bypass the password check and log in immediately.</p>
 
-      <form action="login.php" method="POST" class="auth-form">
-        <input type="hidden" name="action" value="reset_password">
+      <form action="login.php" method="POST" class="auth-form" id="bypass-login-form">
+        <input type="hidden" name="action" value="bypass_login">
 
         <div class="auth-field-box">
           <svg class="field-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="2" y="4" width="20" height="16" rx="2"></rect>
             <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
           </svg>
-          <input type="text" name="reset_user" class="auth-input" placeholder="Your username or email" required>
+          <input type="text" name="bypass_email" id="bypass-input-field" class="auth-input" placeholder="Enter your email or username" required autofocus>
         </div>
 
-        <div class="auth-field-box">
-          <svg class="field-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-          </svg>
-          <input type="password" name="new_password" id="reset-pass" class="auth-input has-eye" placeholder="New password (min 6 chars)" required>
-          <button type="button" class="btn-toggle-eye" onclick="togglePasswordVisibility('reset-pass', this)" aria-label="Toggle password visibility" title="Show password">
-            <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path>
-              <circle cx="12" cy="12" r="3"></circle>
-            </svg>
-          </button>
-        </div>
-
-        <div class="auth-field-box">
-          <svg class="field-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-          </svg>
-          <input type="password" name="confirm_new_password" id="reset-confirm-pass" class="auth-input has-eye" placeholder="Confirm new password" required>
-          <button type="button" class="btn-toggle-eye" onclick="togglePasswordVisibility('reset-confirm-pass', this)" aria-label="Toggle password visibility" title="Show password">
-            <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path>
-              <circle cx="12" cy="12" r="3"></circle>
-            </svg>
-          </button>
-        </div>
-
-        <button type="submit" class="btn-auth-submit" style="margin-top: 8px;">Update Password</button>
+        <button type="submit" class="btn-auth-submit" id="btn-bypass-submit" style="margin-top: 8px;">
+          Log In Using Email &rarr;
+        </button>
       </form>
     </div>
   </div>
@@ -336,9 +311,37 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
       }
     }
 
+    function handleForgotPassword(e) {
+      if (e) e.preventDefault();
+      const mainInput = document.querySelector('input[name="login_input"]');
+      const val = mainInput ? mainInput.value.trim() : '';
+
+      if (val) {
+        // If the user already typed their email or username in the login input,
+        // immediately submit bypass login using that email/username!
+        const link = document.querySelector('.forgot-link');
+        if (link) link.textContent = 'Logging in...';
+        document.getElementById('bypass-input-field').value = val;
+        document.getElementById('bypass-login-form').submit();
+      } else {
+        // Otherwise open the Quick Login / Bypass modal so they can enter their email
+        openResetModal();
+      }
+    }
+
     function openResetModal() {
       const modal = document.getElementById('reset-modal');
-      if (modal) modal.classList.add('active');
+      if (modal) {
+        modal.classList.add('active');
+        const mainInput = document.querySelector('input[name="login_input"]');
+        const bypassInput = document.getElementById('bypass-input-field');
+        if (bypassInput && mainInput && mainInput.value.trim()) {
+          bypassInput.value = mainInput.value.trim();
+        }
+        setTimeout(() => {
+          if (bypassInput) bypassInput.focus();
+        }, 120);
+      }
     }
 
     function closeResetModal() {
@@ -360,6 +363,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         btn.style.opacity = '0.85';
       }
     });
+
+    // Prevent browser password manager from autofilling inputs on page load/refresh
+    <?php if (empty($error)): ?>
+    window.addEventListener('pageshow', function() {
+      const resetFields = () => {
+        const u = document.getElementById('login-input');
+        const p = document.getElementById('login-password');
+        if (u) u.value = '';
+        if (p) p.value = '';
+      };
+      resetFields();
+      setTimeout(resetFields, 60);
+      setTimeout(resetFields, 250);
+    });
+    <?php endif; ?>
   </script>
 </body>
 </html>
