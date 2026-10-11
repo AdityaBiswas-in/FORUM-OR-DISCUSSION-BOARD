@@ -1,8 +1,8 @@
 -- Quaddit Database Schema
 -- Compatible with MySQL / MariaDB (XAMPP / phpMyAdmin)
 
-CREATE DATABASE IF NOT EXISTS `Quaddit` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE `Quaddit`;
+CREATE DATABASE IF NOT EXISTS `campus_forum` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE `campus_forum`;
 
 -- --------------------------------------------------------
 -- 1. Table structure for `users`
@@ -97,5 +97,3 @@ CREATE TABLE IF NOT EXISTS `saved_posts` (
   CONSTRAINT `fk_saved_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_saved_post` FOREIGN KEY (`post_id`) REFERENCES `posts` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-
