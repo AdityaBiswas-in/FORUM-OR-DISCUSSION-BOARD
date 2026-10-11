@@ -20,7 +20,13 @@ if (!$currentUser) {
 
 // Global time_ago helper if not already defined
 if (!function_exists('time_ago')) {
-    function time_ago($datetime) {
+    /**
+     * Calculate relative time elapsed from a datetime string.
+     *
+     * @param string|null $datetime
+     * @return string
+     */
+    function time_ago(?string $datetime): string {
         if (empty($datetime)) return 'just now';
         $diff = time() - strtotime($datetime);
         if ($diff < 60) return 'just now';
@@ -749,7 +755,7 @@ function closeEditProfileModal() {
 // Live Image Previews in Edit Modal
 function handleModalBannerPreview(input) {
   if (input.files && input.files[0]) {
-    const reader = new FileReader();
+    const reader = new window.FileReader();
     reader.onload = function(e) {
       const img = document.getElementById('preview-modal-banner');
       if (img) {
@@ -762,7 +768,7 @@ function handleModalBannerPreview(input) {
 }
 function handleModalAvatarPreview(input) {
   if (input.files && input.files[0]) {
-    const reader = new FileReader();
+    const reader = new window.FileReader();
     reader.onload = function(e) {
       const img = document.getElementById('preview-modal-avatar');
       if (img) img.src = e.target.result;

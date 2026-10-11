@@ -64,4 +64,4 @@ FORUM-OR-DISCUSSION-BOARD/
    ```text
    http://localhost/FORUM-OR-DISCUSSION-BOARD/
    ```
-   The database `campus_forum` will automatically connect or create tables on first run via `db.php`.
+   The database `Quaddit` will automatically connect or create tables on first run via `db.php`.

@@ -14,7 +14,7 @@ if (session_status() === PHP_SESSION_NONE) {
 $db_host = '127.0.0.1';
 $db_user = 'root';
 $db_pass = '';
-$db_name = 'campus_forum';
+$db_name = 'Quaddit';
 
 try {
     $pdo = new PDO("mysql:host={$db_host};charset=utf8mb4", $db_user, $db_pass, [
@@ -43,14 +43,25 @@ try {
 
 // Global sanitization helper
 if (!function_exists('e')) {
-    function e($str) {
+    /**
+     * Escape HTML special characters for safe rendering.
+     *
+     * @param string|null $str
+     * @return string
+     */
+    function e(?string $str): string {
         return htmlspecialchars($str ?? '', ENT_QUOTES, 'UTF-8');
     }
 }
 
 // Global authentication helpers
 if (!function_exists('is_logged_in')) {
-    function is_logged_in() {
+    /**
+     * Check if the current session represents a valid logged in user.
+     *
+     * @return bool
+     */
+    function is_logged_in(): bool {
         global $pdo;
         if (empty($_SESSION['user_id'])) {
             return false;

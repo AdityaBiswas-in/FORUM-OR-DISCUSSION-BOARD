@@ -23,12 +23,24 @@ if (!$currentUser) {
 // 2. HELPER FUNCTIONS
 // ========================================================
 if (!function_exists('e')) {
-    function e($str) {
+    /**
+     * Escape HTML special characters for safe rendering.
+     *
+     * @param string|null $str
+     * @return string
+     */
+    function e(?string $str): string {
         return htmlspecialchars($str ?? '', ENT_QUOTES, 'UTF-8');
     }
 }
 
-function time_ago($datetime) {
+/**
+ * Calculate relative time elapsed from a datetime string.
+ *
+ * @param string|null $datetime
+ * @return string
+ */
+function time_ago(?string $datetime): string {
     if (empty($datetime)) return 'just now';
     $diff = time() - strtotime($datetime);
     if ($diff < 60) return 'just now';
@@ -38,7 +50,15 @@ function time_ago($datetime) {
     return date('M j, Y', strtotime($datetime));
 }
 
-function upload_post_images($files, $post_id, $pdo) {
+/**
+ * Upload multiple images for a forum post.
+ *
+ * @param array|null $files
+ * @param int $post_id
+ * @param PDO $pdo
+ * @return void
+ */
+function upload_post_images(?array $files, int $post_id, PDO $pdo): void {
     if (empty($files) || empty($files['name'][0])) return;
     $dir = __DIR__ . '/assets/uploads/';
     if (!is_dir($dir)) mkdir($dir, 0777, true);
@@ -57,7 +77,13 @@ function upload_post_images($files, $post_id, $pdo) {
     }
 }
 
-function upload_single_image($file) {
+/**
+ * Upload a single image file for a reply.
+ *
+ * @param array|null $file
+ * @return string|null
+ */
+function upload_single_image(?array $file): ?string {
     if (empty($file) || $file['error'] !== UPLOAD_ERR_OK) return null;
     $dir = __DIR__ . '/assets/uploads/';
     if (!is_dir($dir)) mkdir($dir, 0777, true);
@@ -71,7 +97,18 @@ function upload_single_image($file) {
     return null;
 }
 
-function renderReplyNode($rep, $childrenByParent, $repliesById, $currentUser, $postId, $depth = 0) {
+/**
+ * Render a nested reply tree node recursively.
+ *
+ * @param array $rep
+ * @param array $childrenByParent
+ * @param array $repliesById
+ * @param array $currentUser
+ * @param int $postId
+ * @param int $depth
+ * @return void
+ */
+function renderReplyNode(array $rep, array $childrenByParent, array $repliesById, array $currentUser, int $postId, int $depth = 0): void {
     $isRepAuthor = ((int)$rep['user_id'] === (int)$currentUser['id']);
     $repId = (int)$rep['id'];
     $parentId = !empty($rep['parent_id']) ? (int)$rep['parent_id'] : 0;
@@ -1124,7 +1161,7 @@ function handleEditImageSelection(input) {
   const files = Array.from(input.files);
   files.slice(0, 4).forEach((file) => {
     if (!file.type.startsWith('image/')) return;
-    const reader = new FileReader();
+    const reader = new window.FileReader();
     reader.onload = (e) => {
       const thumb = document.createElement('div');
       thumb.className = 'preview-thumb-container';

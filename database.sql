@@ -1,8 +1,8 @@
 -- Quaddit Database Schema
 -- Compatible with MySQL / MariaDB (XAMPP / phpMyAdmin)
 
-CREATE DATABASE IF NOT EXISTS `campus_forum` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE `campus_forum`;
+CREATE DATABASE IF NOT EXISTS `Quaddit` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE `Quaddit`;
 
 -- --------------------------------------------------------
 -- 1. Table structure for `users`
