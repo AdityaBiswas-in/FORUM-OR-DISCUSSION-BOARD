@@ -1,10 +1,9 @@
 <?php
 // register.php - CampusForum Sign Up Screen matching Image 2
-require_once __DIR__ . '/includes/db.php';
-require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/db.php';
 
 // If already logged in, go straight to index.php
-if (is_logged_in()) {
+if (!empty($_SESSION['user_id'])) {
     header("Location: index.php");
     exit;
 }

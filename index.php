@@ -1,236 +1,977 @@
 <?php
-// index.php - Main Discussion Feed for CampusForum
-$pageTitle = 'Home';
-require_once __DIR__ . '/includes/header.php';
+// index.php - All-in-One CampusForum Discussion Board
+// Handles: Posting, Feed, Editing Posts, Deleting Posts, Replying, Editing Replies, Deleting Replies, and Bookmarks/Likes.
+require_once __DIR__ . '/db.php';
 
-// Topic filter
+// ========================================================
+// 1. SESSION & CURRENT USER SETUP
+// ========================================================
+$currentUser = null;
+if (!empty($_SESSION['user_id'])) {
+    $stmt = $pdo->prepare("SELECT id, username, email, name, avatar, role, bio FROM users WHERE id = ?");
+    $stmt->execute([$_SESSION['user_id']]);
+    $currentUser = $stmt->fetch();
+}
+
+// Fallback: If not logged in in session, check remember cookie or use default student
+if (!$currentUser) {
+    if (!empty($_COOKIE['campus_remember'])) {
+        $remember_id = (int)explode(':', $_COOKIE['campus_remember'])[0];
+        if ($remember_id > 0) {
+            $stmt = $pdo->prepare("SELECT id, username, email, name, avatar, role, bio FROM users WHERE id = ?");
+            $stmt->execute([$remember_id]);
+            $currentUser = $stmt->fetch();
+        }
+    }
+    // If still null, fetch the first available user so localhost development works seamlessly
+    if (!$currentUser) {
+        $stmt = $pdo->query("SELECT id, username, email, name, avatar, role, bio FROM users ORDER BY id ASC LIMIT 1");
+        $currentUser = $stmt->fetch();
+        if ($currentUser) {
+            $_SESSION['user_id'] = (int)$currentUser['id'];
+        } else {
+            // Auto-create default admin/student user if users table is empty
+            $hash = password_hash('password123', PASSWORD_BCRYPT);
+            $pdo->prepare("INSERT INTO users (username, email, password, name, avatar) VALUES (?, ?, ?, ?, ?)")
+                ->execute(['aditya', 'aditya@campus.edu', $hash, 'Aditya Biswas', 'assets/images/avatar_default.svg']);
+            $uid = $pdo->lastInsertId();
+            $_SESSION['user_id'] = (int)$uid;
+            $currentUser = ['id' => $uid, 'username' => 'aditya', 'email' => 'aditya@campus.edu', 'name' => 'Aditya Biswas', 'avatar' => 'assets/images/avatar_default.svg', 'role' => 'student', 'bio' => 'Campus member'];
+        }
+    }
+}
+
+// ========================================================
+// 2. HELPER FUNCTIONS
+// ========================================================
+function e($str) {
+    return htmlspecialchars($str ?? '', ENT_QUOTES, 'UTF-8');
+}
+
+function time_ago($datetime) {
+    if (empty($datetime)) return 'just now';
+    $diff = time() - strtotime($datetime);
+    if ($diff < 60) return 'just now';
+    if ($diff < 3600) return floor($diff / 60) . 'm ago';
+    if ($diff < 86400) return floor($diff / 3600) . 'h ago';
+    if ($diff < 604800) return floor($diff / 86400) . 'd ago';
+    return date('M j, Y', strtotime($datetime));
+}
+
+function upload_post_images($files, $post_id, $pdo) {
+    if (empty($files) || empty($files['name'][0])) return;
+    $dir = __DIR__ . '/assets/uploads/';
+    if (!is_dir($dir)) mkdir($dir, 0777, true);
+    $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    $stmt = $pdo->prepare("INSERT INTO post_images (post_id, image_url) VALUES (?, ?)");
+    for ($i = 0; $i < min(count($files['name']), 4); $i++) {
+        if ($files['error'][$i] === UPLOAD_ERR_OK) {
+            $ext = strtolower(pathinfo($files['name'][$i], PATHINFO_EXTENSION));
+            if (in_array($ext, $allowed)) {
+                $name = 'post_' . $post_id . '_' . time() . '_' . $i . '.' . $ext;
+                if (move_uploaded_file($files['tmp_name'][$i], $dir . $name)) {
+                    $stmt->execute([$post_id, 'assets/uploads/' . $name]);
+                }
+            }
+        }
+    }
+}
+
+function upload_single_image($file) {
+    if (empty($file) || $file['error'] !== UPLOAD_ERR_OK) return null;
+    $dir = __DIR__ . '/assets/uploads/';
+    if (!is_dir($dir)) mkdir($dir, 0777, true);
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
+        $name = 'reply_' . time() . '_' . rand(100, 999) . '.' . $ext;
+        if (move_uploaded_file($file['tmp_name'], $dir . $name)) {
+            return 'assets/uploads/' . $name;
+        }
+    }
+    return null;
+}
+
+// ========================================================
+// 3. ACTION HANDLERS (POST, EDIT, DELETE, REPLY, SAVE)
+// ========================================================
+$action = $_POST['action'] ?? $_GET['action'] ?? '';
+
+// 3.1 CREATE POST
+if ($action === 'create_post' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $title = trim($_POST['title'] ?? '');
+    $content = trim($_POST['content'] ?? '');
+    $topic_id = (int)($_POST['topic_id'] ?? 1);
+    if (!empty($title) && !empty($content)) {
+        $stmt = $pdo->prepare("INSERT INTO posts (user_id, topic_id, title, content, created_at) VALUES (?, ?, ?, ?, NOW())");
+        $stmt->execute([$currentUser['id'], $topic_id, $title, $content]);
+        $post_id = $pdo->lastInsertId();
+        upload_post_images($_FILES['images'] ?? null, $post_id, $pdo);
+        header("Location: index.php?msg=created#post-" . $post_id);
+        exit;
+    }
+    header("Location: index.php?error=empty_fields");
+    exit;
+}
+
+// 3.2 EDIT POST
+if ($action === 'edit_post' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $post_id = (int)($_POST['post_id'] ?? 0);
+    $title = trim($_POST['title'] ?? '');
+    $content = trim($_POST['content'] ?? '');
+    $topic_id = (int)($_POST['topic_id'] ?? 1);
+
+    $stmt = $pdo->prepare("SELECT user_id FROM posts WHERE id = ?");
+    $stmt->execute([$post_id]);
+    $p = $stmt->fetch();
+
+    if ($p && (int)$p['user_id'] === (int)$currentUser['id'] && !empty($title) && !empty($content)) {
+        $stmt = $pdo->prepare("UPDATE posts SET title = ?, topic_id = ?, content = ?, updated_at = NOW() WHERE id = ?");
+        $stmt->execute([$title, $topic_id, $content, $post_id]);
+        upload_post_images($_FILES['images'] ?? null, $post_id, $pdo);
+    }
+    header("Location: index.php#post-" . $post_id);
+    exit;
+}
+
+// 3.3 DELETE POST
+if ($action === 'delete_post') {
+    $post_id = (int)($_REQUEST['id'] ?? $_POST['post_id'] ?? 0);
+    $stmt = $pdo->prepare("SELECT user_id FROM posts WHERE id = ?");
+    $stmt->execute([$post_id]);
+    $p = $stmt->fetch();
+
+    if ($p && (int)$p['user_id'] === (int)$currentUser['id']) {
+        $imgStmt = $pdo->prepare("SELECT image_url FROM post_images WHERE post_id = ?");
+        $imgStmt->execute([$post_id]);
+        foreach ($imgStmt->fetchAll(PDO::FETCH_COLUMN) as $img) {
+            $f = __DIR__ . '/' . $img;
+            if (file_exists($f)) @unlink($f);
+        }
+        $pdo->prepare("DELETE FROM posts WHERE id = ?")->execute([$post_id]);
+    }
+    header("Location: index.php?msg=deleted");
+    exit;
+}
+
+// 3.4 CREATE REPLY ON POST
+if ($action === 'create_reply' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $post_id = (int)($_POST['post_id'] ?? 0);
+    $parent_id = !empty($_POST['parent_id']) ? (int)$_POST['parent_id'] : null;
+    $content = trim($_POST['content'] ?? '');
+    $image_url = upload_single_image($_FILES['reply_image'] ?? null);
+
+    if (!empty($content) || !empty($image_url)) {
+        $stmt = $pdo->prepare("INSERT INTO replies (post_id, user_id, parent_id, content, image_url, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
+        $stmt->execute([$post_id, $currentUser['id'], $parent_id, $content, $image_url]);
+        $reply_id = $pdo->lastInsertId();
+        header("Location: index.php#reply-" . $reply_id);
+        exit;
+    }
+    header("Location: index.php#post-" . $post_id);
+    exit;
+}
+
+// 3.5 EDIT REPLY
+if ($action === 'edit_reply' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $reply_id = (int)($_POST['reply_id'] ?? 0);
+    $content = trim($_POST['content'] ?? '');
+
+    $stmt = $pdo->prepare("SELECT user_id, post_id FROM replies WHERE id = ?");
+    $stmt->execute([$reply_id]);
+    $r = $stmt->fetch();
+
+    if ($r && (int)$r['user_id'] === (int)$currentUser['id'] && !empty($content)) {
+        $stmt = $pdo->prepare("UPDATE replies SET content = ?, updated_at = NOW() WHERE id = ?");
+        $stmt->execute([$content, $reply_id]);
+        header("Location: index.php#reply-" . $reply_id);
+        exit;
+    }
+    header("Location: index.php");
+    exit;
+}
+
+// 3.6 DELETE REPLY
+if ($action === 'delete_reply') {
+    $reply_id = (int)($_REQUEST['id'] ?? $_POST['reply_id'] ?? 0);
+    $stmt = $pdo->prepare("SELECT user_id, post_id, image_url FROM replies WHERE id = ?");
+    $stmt->execute([$reply_id]);
+    $r = $stmt->fetch();
+
+    if ($r && (int)$r['user_id'] === (int)$currentUser['id']) {
+        if (!empty($r['image_url']) && file_exists(__DIR__ . '/' . $r['image_url'])) {
+            @unlink(__DIR__ . '/' . $r['image_url']);
+        }
+        $pdo->prepare("DELETE FROM replies WHERE id = ?")->execute([$reply_id]);
+        header("Location: index.php#post-" . (int)$r['post_id']);
+        exit;
+    }
+    header("Location: index.php");
+    exit;
+}
+
+// 3.7 TOGGLE SAVE (BOOKMARK)
+if ($action === 'toggle_save') {
+    $post_id = (int)($_REQUEST['post_id'] ?? 0);
+    $is_ajax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) || (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false);
+
+    $stmt = $pdo->prepare("SELECT id FROM saved_posts WHERE user_id = ? AND post_id = ?");
+    $stmt->execute([$currentUser['id'], $post_id]);
+    $existing = $stmt->fetch();
+
+    if ($existing) {
+        $pdo->prepare("DELETE FROM saved_posts WHERE id = ?")->execute([$existing['id']]);
+        $saved = false;
+    } else {
+        $pdo->prepare("INSERT INTO saved_posts (user_id, post_id, created_at) VALUES (?, ?, NOW())")->execute([$currentUser['id'], $post_id]);
+        $saved = true;
+    }
+
+    if ($is_ajax) {
+        header('Content-Type: application/json');
+        echo json_encode(['success' => true, 'saved' => $saved]);
+        exit;
+    }
+    header("Location: index.php#post-" . $post_id);
+    exit;
+}
+
+// 3.8 TOGGLE LIKE
+if ($action === 'toggle_like') {
+    $post_id = (int)($_REQUEST['post_id'] ?? 0);
+    $is_ajax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) || (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false);
+
+    $stmt = $pdo->prepare("SELECT id FROM likes WHERE user_id = ? AND post_id = ? AND reply_id IS NULL");
+    $stmt->execute([$currentUser['id'], $post_id]);
+    $existing = $stmt->fetch();
+
+    if ($existing) {
+        $pdo->prepare("DELETE FROM likes WHERE id = ?")->execute([$existing['id']]);
+        $liked = false;
+    } else {
+        $pdo->prepare("INSERT INTO likes (user_id, post_id, created_at) VALUES (?, ?, NOW())")->execute([$currentUser['id'], $post_id]);
+        $liked = true;
+    }
+
+    $count = (int)$pdo->query("SELECT COUNT(*) FROM likes WHERE post_id = {$post_id} AND reply_id IS NULL")->fetchColumn();
+
+    if ($is_ajax) {
+        header('Content-Type: application/json');
+        echo json_encode(['success' => true, 'liked' => $liked, 'count' => $count]);
+        exit;
+    }
+    header("Location: index.php#post-" . $post_id);
+    exit;
+}
+
+// ========================================================
+// 4. FETCH DATA FOR VIEW (POSTS, TOPICS, REPLIES)
+// ========================================================
 $current_topic_slug = $_GET['topic'] ?? '';
-$search_query = trim($_GET['q'] ?? '');
+$search_query       = trim($_GET['q'] ?? '');
+$current_view       = $_GET['view'] ?? 'feed';
+
+$where  = [];
+$params = [$currentUser['id'], $currentUser['id']];
+
+if (!empty($current_topic_slug)) {
+    $where[]  = "t.slug = ?";
+    $params[] = $current_topic_slug;
+}
+if (!empty($search_query)) {
+    $where[]  = "(p.title LIKE ? OR p.content LIKE ?)";
+    $params[] = "%{$search_query}%";
+    $params[] = "%{$search_query}%";
+}
+if ($current_view === 'saved') {
+    $where[]  = "p.id IN (SELECT post_id FROM saved_posts WHERE user_id = ?)";
+    $params[] = $currentUser['id'];
+}
 
 $sql = "
     SELECT p.*, u.name as author_name, u.username as author_username, u.avatar as author_avatar,
            t.name as topic_name, t.slug as topic_slug,
-           (SELECT COUNT(*) FROM replies r WHERE r.post_id = p.id) as reply_count
+           (SELECT COUNT(*) FROM replies r WHERE r.post_id = p.id) as reply_count,
+           (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id AND l.reply_id IS NULL) as like_count,
+           (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id AND l.user_id = ?) as is_liked,
+           (SELECT COUNT(*) FROM saved_posts sp WHERE sp.post_id = p.id AND sp.user_id = ?) as is_saved
     FROM posts p
     JOIN users u ON p.user_id = u.id
     JOIN topics t ON p.topic_id = t.id
 ";
-
-$params = [];
-$where = [];
-
-if (!empty($current_topic_slug)) {
-    $where[] = "t.slug = ?";
-    $params[] = $current_topic_slug;
-}
-
-if (!empty($search_query)) {
-    $where[] = "(p.title LIKE ? OR p.content LIKE ?)";
-    $params[] = "%{$search_query}%";
-    $params[] = "%{$search_query}%";
-}
-
 if (!empty($where)) {
     $sql .= " WHERE " . implode(" AND ", $where);
 }
-
 $sql .= " ORDER BY p.created_at DESC";
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $posts = $stmt->fetchAll();
 
-$topics = get_all_topics();
+// Fetch all images for these posts
+$postImages = [];
+$post_ids = array_column($posts, 'id');
+if (!empty($post_ids)) {
+    $in = implode(',', array_fill(0, count($post_ids), '?'));
+    $imgStmt = $pdo->prepare("SELECT post_id, image_url FROM post_images WHERE post_id IN ($in) ORDER BY id ASC");
+    $imgStmt->execute($post_ids);
+    while ($row = $imgStmt->fetch()) {
+        $postImages[$row['post_id']][] = $row['image_url'];
+    }
+}
+
+// Fetch all replies for these posts
+$repliesByPost = [];
+if (!empty($post_ids)) {
+    $in = implode(',', array_fill(0, count($post_ids), '?'));
+    $repStmt = $pdo->prepare("
+        SELECT r.*, u.name as author_name, u.username as author_username, u.avatar as author_avatar
+        FROM replies r
+        JOIN users u ON r.user_id = u.id
+        WHERE r.post_id IN ($in)
+        ORDER BY r.created_at ASC
+    ");
+    $repStmt->execute($post_ids);
+    while ($r = $repStmt->fetch()) {
+        $repliesByPost[$r['post_id']][] = $r;
+    }
+}
+
+// All Topics for Pills & Composer
+$allTopics = $pdo->query("SELECT * FROM topics ORDER BY id ASC")->fetchAll();
+
+// Recent Discussions for right sidebar
+$recentDiscussions = $pdo->query("
+    SELECT p.id, p.title, p.created_at, u.name, u.avatar,
+           (SELECT COUNT(*) FROM replies r WHERE r.post_id = p.id) as reply_count
+    FROM posts p
+    JOIN users u ON p.user_id = u.id
+    ORDER BY p.created_at DESC LIMIT 5
+")->fetchAll();
 ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CampusForum - College Discussion Board</title>
+  <meta name="description" content="CampusForum is the modern discussion board for college students to share questions, images, setups, and campus moments.">
+  <link rel="stylesheet" href="assets/css/style.css?v=<?= file_exists(__DIR__ . '/assets/css/style.css') ? filemtime(__DIR__ . '/assets/css/style.css') : time() ?>">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2338bdf8'><path d='M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z'/></svg>">
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('campus_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
+</head>
+<body>
+<div class="app-container">
 
-<!-- LEFT SIDEBAR -->
-<?php require_once __DIR__ . '/includes/sidebar_left.php'; ?>
-
-<!-- MAIN FEED COLUMN -->
-<main class="main-feed-column">
-  <!-- Search Bar matching Image 1 -->
-  <div class="search-container">
-    <form action="index.php" method="GET" class="search-box">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="11" cy="11" r="8"></circle>
-        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-      </svg>
-      <input type="text" name="q" placeholder="Search discussions..." value="<?= e($search_query) ?>" autocomplete="off">
-      <?php if (!empty($current_topic_slug)): ?>
-        <input type="hidden" name="topic" value="<?= e($current_topic_slug) ?>">
-      <?php endif; ?>
-    </form>
-  </div>
-
-  <!-- Quick Topic Pills Filter -->
-  <div class="topic-pills-bar">
-    <a href="index.php" class="topic-pill <?= empty($current_topic_slug) ? 'active' : '' ?>">All Topics</a>
-    <?php foreach ($topics as $top): ?>
-      <a href="index.php?topic=<?= e($top['slug']) ?>" class="topic-pill <?= ($current_topic_slug === $top['slug']) ? 'active' : '' ?>">
-        # <?= e($top['name']) ?>
-      </a>
-    <?php endforeach; ?>
-  </div>
-
-  <!-- X-style "What's happening?" Quick Composer -->
-  <div class="x-quick-composer" onclick="openCreateThreadModal()">
-    <img src="<?= e($currentUser['avatar']) ?>" alt="<?= e($currentUser['name']) ?>" class="composer-avatar">
-    <div class="composer-content-box">
-      <div class="composer-placeholder">What's happening?</div>
-      <div class="composer-bottom-bar">
-        <div class="composer-tools">
-          <!-- Only Image upload option as requested -->
-          <button type="button" class="composer-tool-btn" title="Add Photos">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M3 5.5C3 4.119 4.119 3 5.5 3h13C19.881 3 21 4.119 21 5.5v13c0 1.381-1.119 2.5-2.5 2.5h-13C4.119 21 3 19.881 3 18.5v-13zM5.5 5c-.276 0-.5.224-.5.5v9.086l3.293-3.293a1 1 0 0 1 1.414 0l4 4a1 1 0 0 1 0 1.414l-1.293 1.293H18.5c.276 0 .5-.224.5-.5V5.5c0-.276-.224-.5-.5-.5h-13zM15 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/>
-            </svg>
-          </button>
+  <!-- ======================================================== -->
+  <!-- LEFT SIDEBAR                                             -->
+  <!-- ======================================================== -->
+  <aside class="sidebar-left">
+    <div>
+      <!-- Brand Logo -->
+      <a href="index.php" class="brand-header">
+        <div class="brand-logo-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
         </div>
-        <button type="button" class="composer-post-btn">Post</button>
+        <div class="brand-text">Campus<span>Forum</span></div>
+      </a>
+
+      <!-- Navigation Menu -->
+      <ul class="nav-menu">
+        <li class="nav-item <?= ($current_view !== 'saved') ? 'active' : '' ?>">
+          <a href="index.php" id="nav-home">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+            </svg>
+            <span>Home</span>
+          </a>
+        </li>
+        <li class="nav-item <?= ($current_view === 'saved') ? 'active' : '' ?>">
+          <a href="index.php?view=saved" id="nav-saved">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
+              <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
+            </svg>
+            <span>Bookmarks</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="javascript:void(0)" id="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+            <span id="theme-icon-container">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" class="theme-icon-sun" style="display:none;">
+                <circle cx="12" cy="12" r="5"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+              </svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" class="theme-icon-moon">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+              </svg>
+            </span>
+            <span id="theme-label-text">Theme: Dark</span>
+          </a>
+        </li>
+      </ul>
+
+      <!-- Primary Post Button -->
+      <button class="btn-create-thread-sidebar" id="btn-open-create-modal" onclick="openCreateThreadModal()">
+        <span>Post</span>
+      </button>
+    </div>
+
+    <!-- User Profile Bar -->
+    <div class="user-profile-bar" id="user-profile-bar" onclick="toggleProfileDropdown(event)">
+      <div class="user-profile-info">
+        <img src="<?= e($currentUser['avatar']) ?>" alt="<?= e($currentUser['name']) ?>" class="user-avatar-img">
+        <div class="user-names">
+          <span class="user-display-name"><?= e($currentUser['name']) ?></span>
+          <span class="user-handle">@<?= e($currentUser['username']) ?></span>
+        </div>
+      </div>
+      <div class="user-dropdown-arrow">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </div>
+
+      <div class="profile-dropdown-menu" id="profile-dropdown-menu">
+        <div style="padding: 8px 12px; font-size: 13px; font-weight: 700; color: var(--text-main);">
+          <?= e($currentUser['name']) ?>
+          <span style="font-size: 12px; font-weight: 500; color: var(--text-dim); display: block;">@<?= e($currentUser['username']) ?></span>
+        </div>
+        <div class="divider"></div>
+        <a href="logout.php" style="color: var(--danger-red);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+          Sign Out
+        </a>
       </div>
     </div>
-  </div>
+  </aside>
 
-  <!-- Show New Posts Indicator matching screenshot -->
-  <div class="show-new-posts-banner" onclick="window.location.reload()">
-    Show new posts
-  </div>
+  <!-- ======================================================== -->
+  <!-- MAIN FEED COLUMN                                         -->
+  <!-- ======================================================== -->
+  <main class="main-feed-column">
+    <!-- Search Bar -->
+    <div class="search-container">
+      <form action="index.php" method="GET" class="search-box">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" name="q" placeholder="Search discussions..." value="<?= e($search_query) ?>" autocomplete="off">
+        <?php if (!empty($current_topic_slug)): ?>
+          <input type="hidden" name="topic" value="<?= e($current_topic_slug) ?>">
+        <?php endif; ?>
+        <?php if ($current_view === 'saved'): ?>
+          <input type="hidden" name="view" value="saved">
+        <?php endif; ?>
+      </form>
+    </div>
 
-  <!-- Discussion Posts Feed -->
-  <div class="posts-feed" id="posts-feed-container">
-    <?php if (!empty($posts)): ?>
-      <?php foreach ($posts as $post): 
-        $postImages = get_post_images($post['id']);
-        $imgCount = count($postImages);
-        $isAuthor = ($currentUser && (int)$post['user_id'] === (int)$currentUser['id']);
-        $isLiked = $currentUser ? user_has_liked($currentUser['id'], $post['id']) : false;
-        $isSaved = $currentUser ? user_has_saved($currentUser['id'], $post['id']) : false;
-        $likeCount = get_like_count($post['id']);
-      ?>
-        <article class="post-card" onclick="goToThread(event, 'thread.php?id=<?= (int)$post['id'] ?>')" data-post-id="<?= (int)$post['id'] ?>">
-          <div class="post-avatar-col">
-            <img src="<?= e($post['author_avatar']) ?>" alt="<?= e($post['author_name']) ?>" class="author-avatar">
+    <!-- Quick Topic Pills Filter -->
+    <div class="topic-pills-bar">
+      <a href="index.php<?= $current_view === 'saved' ? '?view=saved' : '' ?>" class="topic-pill <?= empty($current_topic_slug) ? 'active' : '' ?>">All Topics</a>
+      <?php foreach ($allTopics as $top): ?>
+        <a href="index.php?topic=<?= e($top['slug']) ?><?= $current_view === 'saved' ? '&view=saved' : '' ?>" class="topic-pill <?= ($current_topic_slug === $top['slug']) ? 'active' : '' ?>">
+          # <?= e($top['name']) ?>
+        </a>
+      <?php endforeach; ?>
+    </div>
+
+    <!-- Quick Composer Trigger (Opens compose modal or writes inline) -->
+    <div class="x-quick-composer" onclick="openCreateThreadModal()">
+      <img src="<?= e($currentUser['avatar']) ?>" alt="<?= e($currentUser['name']) ?>" class="composer-avatar">
+      <div class="composer-content-box">
+        <div class="composer-placeholder">What's happening?</div>
+        <div class="composer-bottom-bar">
+          <div class="composer-tools">
+            <button type="button" class="composer-tool-btn" title="Add Photos">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3 5.5C3 4.119 4.119 3 5.5 3h13C19.881 3 21 4.119 21 5.5v13c0 1.381-1.119 2.5-2.5 2.5h-13C4.119 21 3 19.881 3 18.5v-13zM5.5 5c-.276 0-.5.224-.5.5v9.086l3.293-3.293a1 1 0 0 1 1.414 0l4 4a1 1 0 0 1 0 1.414l-1.293 1.293H18.5c.276 0 .5-.224.5-.5V5.5c0-.276-.224-.5-.5-.5h-13zM15 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/>
+              </svg>
+            </button>
           </div>
-          
-          <div class="post-main-col">
-            <!-- Header: Name, Verified Badge, @handle, ·, timestamp, topic, 3-dots -->
-            <div class="post-header">
-              <div class="post-author-meta">
-                <span class="author-name"><?= e($post['author_name']) ?></span>
-                <!-- X Verified Blue Badge -->
-                <svg class="verified-badge" viewBox="0 0 24 24" width="18" height="18" fill="#1d9bf0">
-                  <path d="M22.5 12.5c0-1.58-.875-2.95-2.148-3.6.154-.435.238-.905.238-1.4 0-2.21-1.79-4-4-4-.495 0-.965.084-1.4.238C14.55 2.475 13.18 1.6 11.6 1.6c-1.58 0-2.95.875-3.6 2.148-.435-.154-.905-.238-1.4-.238-2.21 0-4 1.79-4 4 0 .495.084.965.238 1.4C1.575 10.45.7 11.82.7 13.4c0 1.58.875 2.95 2.148 3.6-.154.435-.238.905-.238 1.4 0 2.21 1.79 4 4 4 .495 0 .965-.084 1.4-.238.65 1.273 2.02 2.148 3.6 2.148 1.58 0 2.95-.875 3.6-2.148.435.154.905.238 1.4.238 2.21 0 4-1.79 4-4 0-.495-.084-.965-.238-1.4 1.273-.65 2.148-2.02 2.148-3.6zm-12.87 4.16l-3.29-3.29 1.41-1.41 1.88 1.88 5.18-5.18 1.41 1.41-6.59 6.59z"/>
-                </svg>
-                <span class="user-handle">@<?= e($post['author_username']) ?></span>
-                <span class="post-dot">·</span>
-                <span class="post-timestamp"><?= time_ago($post['created_at']) ?></span>
-              </div>
+          <button type="button" class="composer-post-btn">Post</button>
+        </div>
+      </div>
+    </div>
 
-              <div class="post-header-right">
-                <span class="post-topic-badge"><?= e($post['topic_name']) ?></span>
-                
-                <!-- 3-Dots Action Menu -->
-                <div class="post-actions-menu" onclick="event.stopPropagation()">
-                  <button type="button" class="btn-three-dots" title="More" onclick="togglePostMenu(event, 'post-menu-<?= (int)$post['id'] ?>')">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                      <path d="M3 12c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm9 2c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm7 0c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/>
-                    </svg>
-                  </button>
-                  <div class="three-dots-dropdown" id="post-menu-<?= (int)$post['id'] ?>">
-                    <?php if ($isAuthor): ?>
-                      <button type="button" onclick="openEditPostModal(<?= (int)$post['id'] ?>, <?= htmlspecialchars(json_encode($post['title']), ENT_QUOTES) ?>, <?= (int)$post['topic_id'] ?>, <?= htmlspecialchars(json_encode($post['content']), ENT_QUOTES) ?>)">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                        </svg>
-                        Edit Thread
-                      </button>
-                      <button type="button" class="btn-delete" onclick="confirmDeletePost(<?= (int)$post['id'] ?>)">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <polyline points="3 6 5 6 21 6"></polyline>
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                        </svg>
-                        Delete Thread
-                      </button>
-                    <?php else: ?>
-                      <button type="button" onclick="copyThreadLink(<?= (int)$post['id'] ?>)">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-                          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-                        </svg>
-                        Copy Link
-                      </button>
-                      <button type="button" onclick="toggleSavePost(event, <?= (int)$post['id'] ?>)">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
-                        </svg>
-                        Save Discussion
-                      </button>
-                    <?php endif; ?>
+    <!-- Show New Posts Indicator -->
+    <div class="show-new-posts-banner" onclick="window.location.href='index.php'">
+      Show new posts
+    </div>
+
+    <!-- Discussion Feed -->
+    <div class="posts-feed" id="posts-feed-container">
+      <?php if (!empty($posts)): ?>
+        <?php foreach ($posts as $post): ?>
+          <?php
+            $postId    = (int)$post['id'];
+            $isAuthor  = ((int)$post['user_id'] === (int)$currentUser['id']);
+            $images    = $postImages[$postId] ?? [];
+            $imgCount  = count($images);
+            $replies   = $repliesByPost[$postId] ?? [];
+            $hasReplied = count($replies) > 0;
+          ?>
+          <article class="post-card" id="post-<?= $postId ?>" data-post-id="<?= $postId ?>">
+            <div class="post-avatar-col">
+              <img src="<?= e($post['author_avatar']) ?>" alt="<?= e($post['author_name']) ?>" class="author-avatar">
+            </div>
+            
+            <div class="post-main-col">
+              <!-- Post Header: Author, Badge, @username, Timestamp, Topic Badge, 3-dots -->
+              <div class="post-header">
+                <div class="post-author-meta">
+                  <span class="author-name"><?= e($post['author_name']) ?></span>
+                  <svg class="verified-badge" viewBox="0 0 24 24" width="18" height="18" fill="#1d9bf0" style="display: inline-block; vertical-align: middle;">
+                    <path d="M22.5 12.5c0-1.58-.875-2.95-2.148-3.6.154-.435.238-.905.238-1.4 0-2.21-1.79-4-4-4-.495 0-.965.084-1.4.238C14.55 2.475 13.18 1.6 11.6 1.6c-1.58 0-2.95.875-3.6 2.148-.435-.154-.905-.238-1.4-.238-2.21 0-4 1.79-4 4 0 .495.084.965.238 1.4C1.575 10.45.7 11.82.7 13.4c0 1.58.875 2.95 2.148 3.6-.154.435-.238.905-.238 1.4 0 2.21 1.79 4 4 4 .495 0 .965-.084 1.4-.238.65 1.273 2.02 2.148 3.6 2.148 1.58 0 2.95-.875 3.6-2.148.435.154.905.238 1.4.238 2.21 0 4-1.79 4-4 0-.495-.084-.965-.238-1.4 1.273-.65 2.148-2.02 2.148-3.6zm-12.87 4.16l-3.29-3.29 1.41-1.41 1.88 1.88 5.18-5.18 1.41 1.41-6.59 6.59z"/>
+                  </svg>
+                  <span class="user-handle">@<?= e($post['author_username']) ?></span>
+                  <span class="post-dot">·</span>
+                  <span class="post-timestamp"><?= time_ago($post['created_at']) ?></span>
+                  <?php if (!empty($post['updated_at'])): ?>
+                    <span style="font-size: 11.5px; color: var(--text-dim); margin-left: 4px;">(edited)</span>
+                  <?php endif; ?>
+                </div>
+
+                <div class="post-header-right">
+                  <span class="post-topic-badge"><?= e($post['topic_name']) ?></span>
+                  
+                  <!-- 3-Dots Action Menu -->
+                  <div class="post-actions-menu" onclick="event.stopPropagation()">
+                    <button type="button" class="btn-three-dots" title="More" onclick="togglePostMenu(event, 'post-menu-<?= $postId ?>')">
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                        <path d="M3 12c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm9 2c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm7 0c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/>
+                      </svg>
+                    </button>
+                    <div class="three-dots-dropdown" id="post-menu-<?= $postId ?>">
+                      <?php if ($isAuthor): ?>
+                        <button type="button" 
+                                data-id="<?= $postId ?>" 
+                                data-title="<?= e($post['title']) ?>" 
+                                data-topic="<?= (int)$post['topic_id'] ?>" 
+                                data-content="<?= e($post['content']) ?>" 
+                                onclick="openEditPostModal(this)">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                          </svg>
+                          Edit Discussion
+                        </button>
+                        <button type="button" class="btn-delete" onclick="confirmDeletePost(<?= $postId ?>)">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                          </svg>
+                          Delete Discussion
+                        </button>
+                      <?php else: ?>
+                        <button type="button" onclick="copyThreadLink(<?= $postId ?>)">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                          </svg>
+                          Copy Link
+                        </button>
+                        <button type="button" onclick="toggleSavePost(event, <?= $postId ?>)">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
+                          </svg>
+                          Save Discussion
+                        </button>
+                      <?php endif; ?>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <!-- Post Title -->
-            <h2 class="post-title"><?= e($post['title']) ?></h2>
+              <!-- Post Title -->
+              <h2 class="post-title" onclick="toggleRepliesSection(<?= $postId ?>)" style="cursor: pointer;"><?= e($post['title']) ?></h2>
 
-            <!-- Post Content Text -->
-            <p class="post-body-text"><?= nl2br(e($post['content'])) ?></p>
+              <!-- Post Content Text -->
+              <p class="post-body-text"><?= nl2br(e($post['content'])) ?></p>
 
-            <!-- Adaptive Image Grid (Twitter / X style) -->
-            <?php if ($imgCount > 0): ?>
-              <div class="post-media-grid grid-<?= min($imgCount, 4) ?>" onclick="event.stopPropagation()">
-                <?php foreach ($postImages as $img): ?>
-                  <div class="post-media-item" onclick="openLightbox('<?= e($img) ?>')">
-                    <img src="<?= e($img) ?>" alt="Post attachment" loading="lazy">
+              <!-- Image Gallery -->
+              <?php if ($imgCount > 0): ?>
+                <div class="post-media-grid grid-<?= min($imgCount, 4) ?>" onclick="event.stopPropagation()">
+                  <?php foreach ($images as $img): ?>
+                    <div class="post-media-item" onclick="openLightbox('<?= e($img) ?>')">
+                      <img src="<?= e($img) ?>" alt="Post photo" loading="lazy">
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+              <?php endif; ?>
+
+              <!-- Post Action Bar (Reply, Like, Save, Share) -->
+              <div class="post-footer" onclick="event.stopPropagation()">
+                <!-- Reply Button (Toggles replies and quick response composer) -->
+                <button type="button" class="post-action-btn action-reply" onclick="toggleRepliesSection(<?= $postId ?>)" title="Replies">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                  </svg>
+                  <span id="reply-count-badge-<?= $postId ?>"><?= count($replies) > 0 ? count($replies) . (count($replies) === 1 ? ' reply' : ' replies') : 'Reply' ?></span>
+                </button>
+
+                <!-- Like Button -->
+                <button type="button" class="post-action-btn action-like <?= $post['is_liked'] ? 'active-liked' : '' ?>" id="like-btn-<?= $postId ?>" onclick="toggleLikePost(event, <?= $postId ?>)" title="Like">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="<?= $post['is_liked'] ? 'currentColor' : 'none' ?>" stroke="currentColor" stroke-width="1.8">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"></path>
+                  </svg>
+                  <span id="like-count-<?= $postId ?>"><?= (int)$post['like_count'] > 0 ? (int)$post['like_count'] : '' ?></span>
+                </button>
+
+                <!-- Right Action Icons: Bookmark & Share -->
+                <div class="post-footer-right-icons">
+                  <button type="button" class="post-action-btn action-bookmark <?= $post['is_saved'] ? 'active-saved' : '' ?>" id="save-btn-<?= $postId ?>" onclick="toggleSavePost(event, <?= $postId ?>)" title="Bookmark">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="<?= $post['is_saved'] ? 'currentColor' : 'none' ?>" stroke="currentColor" stroke-width="1.8">
+                      <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
+                    </svg>
+                  </button>
+                  <button type="button" class="post-action-btn action-share" onclick="copyThreadLink(<?= $postId ?>)" title="Share">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                      <polyline points="16 6 12 2 8 6"></polyline>
+                      <line x1="12" y1="2" x2="12" y2="15"></line>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- ==================================================== -->
+              <!-- INLINE REPLIES & REPLY COMPOSER (All in index.php)   -->
+              <!-- ==================================================== -->
+              <div class="post-replies-collapse" id="replies-section-<?= $postId ?>" style="display: <?= $hasReplied ? 'block' : 'none' ?>; margin-top: 14px; border-top: 1px solid var(--border-color); padding-top: 14px;" onclick="event.stopPropagation()">
+                
+                <!-- Quick Inline Reply Composer Form -->
+                <div class="reply-composer-card" style="margin-bottom: 14px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 14px; padding: 12px 14px;">
+                  <div class="reply-composer-header" style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                    <img src="<?= e($currentUser['avatar']) ?>" alt="<?= e($currentUser['name']) ?>" class="reply-avatar" style="width: 26px; height: 26px; border-radius: 50%;">
+                    <span style="font-size: 13px; font-weight: 700; color: var(--text-main);">Reply as <?= e($currentUser['name']) ?></span>
                   </div>
-                <?php endforeach; ?>
-              </div>
-            <?php endif; ?>
+                  <form action="index.php" method="POST" enctype="multipart/form-data">
+                    <input type="hidden" name="action" value="create_reply">
+                    <input type="hidden" name="post_id" value="<?= $postId ?>">
+                    <textarea name="content" class="reply-textarea" placeholder="Post your reply or answer..." required style="width: 100%; min-height: 58px; resize: vertical; border-radius: 8px; padding: 8px 12px; font-size: 13.5px;"></textarea>
+                    
+                    <div class="reply-composer-actions" style="display: flex; align-items: center; justify-content: space-between; margin-top: 8px;">
+                      <label class="btn-attach-image" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--primary-blue);">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                          <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                          <polyline points="21 15 16 10 5 21"></polyline>
+                        </svg>
+                        <span>Attach Photo</span>
+                        <input type="file" name="reply_image" accept="image/*" style="display: none;" onchange="previewReplyImage(this, <?= $postId ?>)">
+                      </label>
+                      <button type="submit" class="btn-post-reply" style="padding: 6px 18px; font-size: 13px; border-radius: 9999px; background: var(--primary-blue); color: #fff; font-weight: 700; border: none; cursor: pointer;">Reply</button>
+                    </div>
+                    <div class="image-preview-strip" id="reply-preview-<?= $postId ?>" style="display: none; margin-top: 8px;"></div>
+                  </form>
+                </div>
 
-            <!-- Card Footer: replies count and bookmark -->
-            <div class="post-footer" onclick="event.stopPropagation()">
-              <!-- Reply button -->
-              <a href="thread.php?id=<?= (int)$post['id'] ?>" class="post-action-btn action-reply" title="Reply">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                <!-- Existing Replies List -->
+                <?php if ($hasReplied): ?>
+                  <div class="replies-tree-list">
+                    <?php foreach ($replies as $rep): ?>
+                      <?php $isRepAuthor = ((int)$rep['user_id'] === (int)$currentUser['id']); ?>
+                      <div class="reply-node" id="reply-<?= (int)$rep['id'] ?>" style="margin-bottom: 12px; padding-left: <?= !empty($rep['parent_id']) ? '24px' : '0' ?>; border-left: <?= !empty($rep['parent_id']) ? '2px solid var(--border-color)' : 'none' ?>;">
+                        <div class="reply-card" style="background: rgba(255,255,255,0.015); border: 1px solid var(--border-color); border-radius: 12px; padding: 10px 14px;">
+                          <div class="reply-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                            <div class="reply-author" style="display: flex; align-items: center; gap: 8px;">
+                              <img src="<?= e($rep['author_avatar']) ?>" alt="<?= e($rep['author_name']) ?>" class="reply-avatar" style="width: 24px; height: 24px; border-radius: 50%;">
+                              <span class="reply-author-name" style="font-size: 13px; font-weight: 700; color: var(--text-main);"><?= e($rep['author_name']) ?></span>
+                              <span class="reply-timestamp" style="font-size: 12px; color: var(--text-dim);">· <?= time_ago($rep['created_at']) ?></span>
+                              <?php if (!empty($rep['updated_at'])): ?>
+                                <span style="font-size: 11px; color: var(--text-dim);">(edited)</span>
+                              <?php endif; ?>
+                            </div>
+
+                            <!-- Actions for reply author (Edit, Delete) -->
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                              <?php if ($isRepAuthor): ?>
+                                <button type="button" class="btn-edit-reply" onclick="toggleEditReplyForm(<?= (int)$rep['id'] ?>)" style="background: none; border: none; color: var(--primary-blue); font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                  </svg>
+                                  Edit
+                                </button>
+                                <a href="index.php?action=delete_reply&id=<?= (int)$rep['id'] ?>" class="btn-delete-reply" onclick="return confirm('Delete this reply?')" style="background: none; border: none; color: var(--danger-red); font-size: 12px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                  </svg>
+                                  Delete
+                                </a>
+                              <?php endif; ?>
+                            </div>
+                          </div>
+
+                          <!-- Reply Body Text -->
+                          <div class="reply-body-text" id="reply-text-<?= (int)$rep['id'] ?>" style="font-size: 13.5px; color: var(--text-main); line-height: 1.5; margin-bottom: 6px;">
+                            <?= nl2br(e($rep['content'])) ?>
+                          </div>
+
+                          <!-- Inline Reply Edit Form -->
+                          <?php if ($isRepAuthor): ?>
+                            <form action="index.php" method="POST" id="reply-edit-form-<?= (int)$rep['id'] ?>" style="display: none; margin-bottom: 10px;">
+                              <input type="hidden" name="action" value="edit_reply">
+                              <input type="hidden" name="reply_id" value="<?= (int)$rep['id'] ?>">
+                              <textarea name="content" class="reply-textarea" style="width: 100%; min-height: 60px; margin-bottom: 8px;" required><?= e($rep['content']) ?></textarea>
+                              <div style="display: flex; gap: 8px;">
+                                <button type="submit" class="btn-post-reply" style="padding: 5px 14px; font-size: 12px;">Save</button>
+                                <button type="button" class="btn-modal-cancel" style="padding: 5px 14px; font-size: 12px;" onclick="toggleEditReplyForm(<?= (int)$rep['id'] ?>)">Cancel</button>
+                              </div>
+                            </form>
+                          <?php endif; ?>
+
+                          <!-- Reply Photo Attachment -->
+                          <?php if (!empty($rep['image_url'])): ?>
+                            <div class="reply-image-attachment" onclick="openLightbox('<?= e($rep['image_url']) ?>')" style="margin: 6px 0; max-width: 240px; border-radius: 8px; overflow: hidden; cursor: pointer;">
+                              <img src="<?= e($rep['image_url']) ?>" alt="Reply photo" style="width: 100%; height: auto; display: block;">
+                            </div>
+                          <?php endif; ?>
+
+                          <!-- Nested Reply Action Trigger -->
+                          <div class="reply-actions-bar" style="margin-top: 6px;">
+                            <button type="button" class="btn-nested-reply" onclick="toggleNestedComposer(<?= (int)$rep['id'] ?>)" style="background: none; border: none; color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 10h10a5 5 0 0 1 5 5v5"></path>
+                                <path d="m7 6-4 4 4 4"></path>
+                              </svg>
+                              Reply
+                            </button>
+                          </div>
+
+                          <!-- Nested Inline Composer Box -->
+                          <div class="inline-nested-composer" id="nested-composer-<?= (int)$rep['id'] ?>" style="display: none; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border-color);">
+                            <form action="index.php" method="POST" enctype="multipart/form-data">
+                              <input type="hidden" name="action" value="create_reply">
+                              <input type="hidden" name="post_id" value="<?= $postId ?>">
+                              <input type="hidden" name="parent_id" value="<?= (int)$rep['id'] ?>">
+                              <textarea name="content" class="reply-textarea" style="width: 100%; min-height: 55px; margin-bottom: 8px;" placeholder="Replying to @<?= e($rep['author_username']) ?>..." required></textarea>
+                              <div style="display: flex; align-items: center; justify-content: space-between;">
+                                <label class="btn-attach-image" style="cursor: pointer; font-size: 12px; color: var(--primary-blue);">
+                                  <span>Photo</span>
+                                  <input type="file" name="reply_image" accept="image/*" style="display: none;">
+                                </label>
+                                <div style="display: flex; gap: 8px;">
+                                  <button type="button" class="btn-modal-cancel" style="padding: 5px 12px; font-size: 12px;" onclick="toggleNestedComposer(<?= (int)$rep['id'] ?>)">Cancel</button>
+                                  <button type="submit" class="btn-post-reply" style="padding: 5px 14px; font-size: 12px;">Reply</button>
+                                </div>
+                              </div>
+                            </form>
+                          </div>
+                        </div>
+                      </div>
+                    <?php endforeach; ?>
+                  </div>
+                <?php endif; ?>
+              </div>
+            </div>
+          </article>
+        <?php endforeach; ?>
+      <?php else: ?>
+        <!-- Empty State Card -->
+        <div class="empty-state-card" style="text-align: center; padding: 56px 28px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; margin-top: 10px; max-width: 600px; margin-left: auto; margin-right: auto;">
+          <div class="empty-state-icon-wrap" style="width: 64px; height: 64px; border-radius: 50%; background: rgba(29, 155, 240, 0.12); border: 1px solid rgba(29, 155, 240, 0.28); display: flex; align-items: center; justify-content: center; color: var(--primary-blue);">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </div>
+          <h2 class="empty-state-title" style="font-size: 20px; font-weight: 800; color: var(--text-main); margin: 0;">
+            <?= !empty($search_query) ? 'No matching discussions' : ($current_view === 'saved' ? 'No saved discussions' : 'No discussions yet') ?>
+          </h2>
+          <p class="empty-state-subtitle" style="font-size: 14px; color: var(--text-muted); max-width: 400px; line-height: 1.5; margin: 0;">
+            <?= !empty($search_query) ? 'No discussions matched your query. Try different words or start a fresh thread.' : ($current_view === 'saved' ? 'You have not bookmarked any discussions yet.' : 'Be the first to share an idea, ask a campus question, or showcase your project.') ?>
+          </p>
+          <button type="button" class="btn-empty-state-cta" onclick="openCreateThreadModal()" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px; padding: 12px 26px; border-radius: 9999px; font-size: 14px; font-weight: 700; background: linear-gradient(135deg, #1d9bf0 0%, #0284c7 100%); color: #ffffff; border: none; cursor: pointer; text-decoration: none; box-shadow: 0 4px 16px rgba(29, 155, 240, 0.35);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/>
+            </svg>
+            <span>Start a New Discussion</span>
+          </button>
+        </div>
+      <?php endif; ?>
+    </div>
+  </main>
+
+  <!-- ======================================================== -->
+  <!-- RIGHT SIDEBAR (Recent Discussions)                       -->
+  <!-- ======================================================== -->
+  <aside class="sidebar-right">
+    <div class="recent-discussions-card">
+      <h3 class="recent-card-header">Recent Discussions</h3>
+      <div class="recent-discussions-list">
+        <?php if (!empty($recentDiscussions)): ?>
+          <?php foreach ($recentDiscussions as $item): ?>
+            <a href="index.php#post-<?= (int)$item['id'] ?>" class="recent-discussion-item" onclick="expandPost(<?= (int)$item['id'] ?>)">
+              <div class="recent-discussion-left">
+                <img src="<?= e($item['avatar']) ?>" alt="<?= e($item['name']) ?>" class="recent-avatar">
+                <div class="recent-info">
+                  <div class="recent-title"><?= e($item['title']) ?></div>
+                  <div class="recent-meta"><?= (int)$item['reply_count'] ?> replies · <?= time_ago($item['created_at']) ?></div>
+                </div>
+              </div>
+              <div class="recent-chevron">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polyline points="9 18 15 12 9 6"></polyline>
                 </svg>
-                <span><?= (int)$post['reply_count'] > 0 ? (int)$post['reply_count'] . ' replies' : 'Reply' ?></span>
-              </a>
-
-              <!-- Right icons: Bookmark & Share -->
-              <div class="post-footer-right-icons">
-                <button type="button" class="post-action-btn action-bookmark <?= $isSaved ? 'active-saved' : '' ?>" id="save-btn-<?= (int)$post['id'] ?>" onclick="toggleSavePost(event, <?= (int)$post['id'] ?>)" title="Bookmark">
-                  <svg viewBox="0 0 24 24" fill="<?= $isSaved ? 'currentColor' : 'none' ?>" stroke="currentColor" stroke-width="1.8">
-                    <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
-                  </svg>
-                </button>
-                <button type="button" class="post-action-btn action-share" onclick="copyThreadLink(<?= (int)$post['id'] ?>)" title="Share">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
-                    <polyline points="16 6 12 2 8 6"></polyline>
-                    <line x1="12" y1="2" x2="12" y2="15"></line>
-                  </svg>
-                </button>
               </div>
+            </a>
+          <?php endforeach; ?>
+        <?php else: ?>
+          <p style="font-size: 13px; color: var(--text-dim); padding: 8px;">No discussions yet.</p>
+        <?php endif; ?>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<!-- ======================================================== -->
+<!-- MODALS (COMPOSE & EDIT)                                  -->
+<!-- ======================================================== -->
+<!-- CREATE THREAD MODAL -->
+<div class="modal-overlay" id="create-thread-modal">
+  <div class="modal-dialog x-compose-dialog">
+    <div class="x-modal-top-bar">
+      <button type="button" class="x-compose-close-btn" onclick="closeCreateThreadModal()" title="Close">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+          <path d="M10.59 12L4.54 5.96l1.42-1.42L12 10.59l6.04-6.05 1.42 1.42L13.41 12l6.05 6.04-1.42 1.42L12 13.41l-6.04 6.05-1.42-1.42L10.59 12z"/>
+        </svg>
+      </button>
+      <span style="font-weight: 700; color: var(--text-main);">New Discussion</span>
+    </div>
+
+    <form action="index.php" method="POST" enctype="multipart/form-data" id="create-post-form">
+      <input type="hidden" name="action" value="create_post">
+      <div class="x-compose-body">
+        <div class="x-compose-left">
+          <img src="<?= e($currentUser['avatar']) ?>" alt="<?= e($currentUser['name']) ?>" class="x-compose-avatar">
+        </div>
+        <div class="x-compose-right">
+          <!-- Title Input -->
+          <input type="text" name="title" id="post-title" class="x-compose-title-input" placeholder="Title of your discussion..." required>
+
+          <!-- Topic Selector -->
+          <div class="x-custom-select-wrapper" id="x-topic-custom-wrapper">
+            <input type="hidden" name="topic_id" id="post-topic" value="<?= (int)($allTopics[0]['id'] ?? 1) ?>" required>
+            
+            <button type="button" class="x-custom-select-btn" id="x-topic-trigger" onclick="toggleCustomTopicDropdown(event)">
+              <span id="x-topic-label"># <?= e($allTopics[0]['name'] ?? 'Programming') ?></span>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                <path d="M3.543 8.96l1.414-1.42L12 14.59l7.043-7.05 1.414 1.42L12 17.41 3.543 8.96z"/>
+              </svg>
+            </button>
+
+            <div class="x-custom-select-menu" id="x-topic-menu">
+              <?php foreach ($allTopics as $index => $t): ?>
+                <div class="x-custom-select-option <?= $index === 0 ? 'selected' : '' ?>" 
+                     data-value="<?= (int)$t['id'] ?>" 
+                     data-label="# <?= e($t['name']) ?>"
+                     onclick="selectCustomTopic(this, <?= (int)$t['id'] ?>, '# <?= e($t['name']) ?>')">
+                  <span class="x-option-tag"># <?= e($t['name']) ?></span>
+                </div>
+              <?php endforeach; ?>
             </div>
           </div>
-        </article>
-      <?php endforeach; ?>
-    <?php else: ?>
-      <div style="text-align: center; padding: 60px 20px; background: var(--bg-card); border-radius: 18px; border: 1px solid var(--border-color);">
-        <p style="color: var(--text-muted); font-size: 16px; margin-bottom: 14px;">
-          <?= !empty($search_query) ? 'No discussions found matching your query.' : 'No discussions yet. Be the first to start a conversation!' ?>
-        </p>
-        <button class="btn-create-thread-welcome" style="display: inline-flex; width: auto;" onclick="openCreateThreadModal()">Start a New Discussion</button>
+
+          <!-- Main Textarea -->
+          <textarea name="content" id="post-content" class="x-compose-textarea" placeholder="What’s happening?" required></textarea>
+
+          <!-- Previews for selected photos -->
+          <div class="image-preview-strip" id="create-image-previews"></div>
+        </div>
       </div>
-    <?php endif; ?>
+
+      <div class="x-compose-bottom-toolbar">
+        <div class="x-toolbar-icons">
+          <button type="button" class="x-tool-btn" onclick="document.getElementById('post-images-input').click()" title="Add photos">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M3 5.5C3 4.119 4.119 3 5.5 3h13C19.881 3 21 4.119 21 5.5v13c0 1.381-1.119 2.5-2.5 2.5h-13C4.119 21 3 19.881 3 18.5v-13zM5.5 5c-.276 0-.5.224-.5.5v9.086l3.293-3.293a1 1 0 0 1 1.414 0l4 4a1 1 0 0 1 0 1.414l-1.293 1.293H18.5c.276 0 .5-.224.5-.5V5.5c0-.276-.224-.5-.5-.5h-13zM15 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/>
+            </svg>
+          </button>
+          <input type="file" name="images[]" id="post-images-input" accept="image/*" multiple style="display: none;" onchange="handleImageSelection(this)">
+        </div>
+
+        <button type="submit" class="x-compose-submit-btn" id="btn-submit-post">Post</button>
+      </div>
+    </form>
   </div>
-</main>
+</div>
 
-<!-- RIGHT SIDEBAR -->
-<?php require_once __DIR__ . '/includes/sidebar_right.php'; ?>
+<!-- EDIT POST MODAL -->
+<div class="modal-overlay" id="edit-post-modal">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <h3 class="modal-title">Edit Discussion Thread</h3>
+      <button class="btn-close-modal" onclick="closeEditPostModal()">✕</button>
+    </div>
+    <form action="index.php" method="POST" enctype="multipart/form-data" id="edit-post-form">
+      <input type="hidden" name="action" value="edit_post">
+      <input type="hidden" name="post_id" id="edit-post-id">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="edit-post-title">Thread Title</label>
+          <input type="text" name="title" id="edit-post-title" class="form-input" required>
+        </div>
 
-<!-- FOOTER -->
-<?php require_once __DIR__ . '/includes/footer.php'; ?>
+        <div class="form-group">
+          <label class="form-label" for="edit-post-topic">Topic Category</label>
+          <select name="topic_id" id="edit-post-topic" class="form-select" required>
+            <?php foreach ($allTopics as $t): ?>
+              <option value="<?= (int)$t['id'] ?>"><?= e($t['name']) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="edit-post-content">Discussion Content</label>
+          <textarea name="content" id="edit-post-content" class="form-textarea" required></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Add Photos (Optional)</label>
+          <div class="image-upload-zone" onclick="document.getElementById('edit-images-input').click()">
+            <div class="upload-text">Click to add photos</div>
+            <input type="file" name="images[]" id="edit-images-input" accept="image/*" multiple style="display: none;" onchange="handleEditImageSelection(this)">
+          </div>
+          <div class="image-preview-strip" id="edit-image-previews"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-modal-cancel" onclick="closeEditPostModal()">Cancel</button>
+        <button type="submit" class="btn-modal-submit" id="btn-save-edit-post">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- FULL IMAGE LIGHTBOX PREVIEW -->
+<div class="lightbox-overlay" id="lightbox-overlay" onclick="closeLightbox(event)">
+  <button class="lightbox-close" onclick="closeLightbox(event)">✕</button>
+  <img src="" alt="Enlarged view" id="lightbox-img" class="lightbox-img" onclick="event.stopPropagation()">
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toast-container"></div>
+
+<script src="assets/js/main.js"></script>
+</body>
+</html>

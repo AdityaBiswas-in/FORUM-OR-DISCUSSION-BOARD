@@ -2131,3 +2131,106 @@ button, input, textarea, select {
     padding: 16px;
   }
 }
+
+/* ================= EMPTY STATE STYLES ================= */
+.empty-state-card {
+  text-align: center;
+  padding: 64px 32px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  margin-top: 10px;
+}
+
+[data-theme="light"] .empty-state-card {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05);
+}
+
+.empty-state-icon-wrap {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: rgba(29, 155, 240, 0.12);
+  border: 1px solid rgba(29, 155, 240, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-blue);
+  margin-bottom: 4px;
+  box-shadow: 0 0 24px rgba(29, 155, 240, 0.18);
+}
+
+.empty-state-icon-wrap svg {
+  width: 30px !important;
+  height: 30px !important;
+  max-width: 30px !important;
+  max-height: 30px !important;
+  display: block !important;
+}
+
+.empty-state-title {
+  font-size: 21px;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: -0.4px;
+  margin: 0;
+}
+
+.empty-state-subtitle {
+  font-size: 14.5px;
+  color: var(--text-muted);
+  max-width: 420px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.btn-empty-state-cta,
+.btn-create-thread-welcome {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  margin-top: 8px;
+  padding: 12px 28px !important;
+  border-radius: 9999px !important;
+  font-size: 14.5px !important;
+  font-weight: 700 !important;
+  background: linear-gradient(135deg, #1d9bf0 0%, #0284c7 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  cursor: pointer;
+  text-decoration: none !important;
+  box-shadow: 0 4px 16px rgba(29, 155, 240, 0.35) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-empty-state-cta:hover,
+.btn-create-thread-welcome:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(29, 155, 240, 0.55) !important;
+  filter: brightness(1.08);
+}
+
+.btn-empty-state-cta:active,
+.btn-create-thread-welcome:active {
+  transform: translateY(0);
+}
+
+.btn-empty-state-cta svg,
+.btn-create-thread-welcome svg {
+  width: 18px !important;
+  height: 18px !important;
+  max-width: 18px !important;
+  max-height: 18px !important;
+  display: block !important;
+  flex-shrink: 0 !important;
+}
+

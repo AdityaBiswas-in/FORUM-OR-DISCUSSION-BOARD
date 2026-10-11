@@ -1,7 +1,14 @@
 <?php
 // login.php - CampusForum Login Screen matching Image 2
-require_once __DIR__ . '/includes/db.php';
-require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/db.php';
+
+function is_logged_in() {
+    return !empty($_SESSION['user_id']);
+}
+
+function set_remember_login($user_id) {
+    setcookie('campus_remember', (string)$user_id, time() + (86400 * 30), '/');
+}
 
 // If already logged in, redirect directly to index.php
 if (is_logged_in()) {
@@ -116,7 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <rect x="2" y="4" width="20" height="16" rx="2"></rect>
             <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
           </svg>
-          <input type="text" name="login_input" class="auth-input" placeholder="Enter your email or username" value="<?= isset($_POST['login_input']) ? e($_POST['login_input']) : 'aditya' ?>" required>
+          <input type="text" name="login_input" class="auth-input" placeholder="Enter your email or username" value="<?= isset($_POST['login_input']) ? e($_POST['login_input']) : e($_GET['username'] ?? '') ?>" required>
         </div>
 
         <!-- Password field with eye toggle -->
@@ -125,7 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
             <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
           </svg>
-          <input type="password" name="password" id="login-password" class="auth-input" placeholder="Enter your password" value="password123" required>
+          <input type="password" name="password" id="login-password" class="auth-input" placeholder="Enter your password" required>
           <button type="button" class="btn-toggle-eye" onclick="togglePasswordVisibility('login-password', this)">
             <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>

@@ -5,7 +5,7 @@ CREATE DATABASE IF NOT EXISTS `campus_forum` CHARACTER SET utf8mb4 COLLATE utf8m
 USE `campus_forum`;
 
 -- --------------------------------------------------------
--- Table structure for `users`
+-- 1. Table structure for `users`
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `users` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS `users` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
--- Table structure for `topics`
+-- 2. Table structure for `topics`
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `topics` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS `topics` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
--- Table structure for `posts`
+-- 3. Table structure for `posts`
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `posts` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS `posts` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
--- Table structure for `post_images`
+-- 4. Table structure for `post_images`
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `post_images` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS `post_images` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
--- Table structure for `replies`
+-- 5. Table structure for `replies`
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `replies` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS `replies` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
--- Table structure for `likes`
+-- 6. Table structure for `likes`
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `likes` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS `likes` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
--- Table structure for `saved_posts`
+-- 7. Table structure for `saved_posts`
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `saved_posts` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -112,10 +112,8 @@ CREATE TABLE IF NOT EXISTS `saved_posts` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
--- Seed Data (Topics categories)
+-- 8. Seed Default Topics
 -- --------------------------------------------------------
-
--- Insert Topics
 INSERT INTO `topics` (`id`, `name`, `slug`, `description`, `color`) VALUES
 (1, 'Programming', 'programming', 'Code, languages, debugging, and software craft', '#38bdf8'),
 (2, 'College', 'college', 'Campus life, college fests, academics and events', '#a855f7'),
@@ -123,4 +121,3 @@ INSERT INTO `topics` (`id`, `name`, `slug`, `description`, `color`) VALUES
 (4, 'Events', 'events', 'Hackathons, festivals, workshops, and guest lectures', '#f59e0b'),
 (5, 'Career', 'career', 'Internships, placements, resume reviews and advice', '#ec4899')
 ON DUPLICATE KEY UPDATE `name`=`name`;
-
