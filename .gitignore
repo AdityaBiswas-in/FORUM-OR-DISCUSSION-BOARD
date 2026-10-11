@@ -1,0 +1,12 @@
+# Database configuration (contains sensitive credentials)
+db.php
+
+# User uploaded attachments
+assets/uploads/*
+!assets/uploads/.gitkeep
+
+# Environment & temporary files
+.env
+*.log
+.DS_Store
+Thumbs.db

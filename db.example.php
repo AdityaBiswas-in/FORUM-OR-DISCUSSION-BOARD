@@ -1,5 +1,7 @@
 <?php
-// db.php - Central Database connection & session setup
+// db.example.php - Template for database connection & session setup
+// Rename or copy this file to 'db.php' and insert your database credentials.
+
 if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.gc_maxlifetime', 60 * 60 * 24 * 30);
     session_set_cookie_params([
@@ -11,7 +13,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Auto-detect environment: Localhost (XAMPP) vs Live Hosting (InfinityFree)
+// Auto-detect environment: Localhost (XAMPP) vs Live Hosting
 $is_local = in_array($_SERVER['HTTP_HOST'] ?? '', ['localhost', '127.0.0.1'])
     || (isset($_SERVER['HTTP_HOST']) && str_starts_with($_SERVER['HTTP_HOST'], 'localhost:'))
     || (php_sapi_name() === 'cli');
@@ -24,12 +26,11 @@ if ($is_local) {
     $db_name = 'Quaddit';
     $db_port = 3306;
 } else {
-    // InfinityFree Live Hosting
-    $db_host = 'sql302.infinityfree.com';
-    $db_user = 'if0_43149342';
-    $db_pass = 'Quaddit007';
-    // Change 'quaddit' to your exact database name created in the InfinityFree Control Panel
-    $db_name = 'if0_43149342_quaddit';
+    // Live Hosting / Production Settings
+    $db_host = 'YOUR_MYSQL_HOSTNAME';
+    $db_user = 'YOUR_MYSQL_USERNAME';
+    $db_pass = 'YOUR_MYSQL_PASSWORD';
+    $db_name = 'YOUR_MYSQL_DATABASE_NAME';
     $db_port = 3306;
 }
 
