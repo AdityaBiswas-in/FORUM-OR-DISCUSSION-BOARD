@@ -11,28 +11,30 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-$db_host = '127.0.0.1';
-$db_user = 'root';
-$db_pass = '';
-$db_name = 'Quaddit';
+// Auto-detect environment: Localhost (XAMPP) vs Live Hosting (InfinityFree)
+$is_local = in_array($_SERVER['HTTP_HOST'] ?? '', ['localhost', '127.0.0.1'])
+    || (isset($_SERVER['HTTP_HOST']) && str_starts_with($_SERVER['HTTP_HOST'], 'localhost:'))
+    || (php_sapi_name() === 'cli');
+
+if ($is_local) {
+    // Localhost (XAMPP)
+    $db_host = '127.0.0.1';
+    $db_user = 'root';
+    $db_pass = '';
+    $db_name = 'Quaddit';
+    $db_port = 3306;
+} else {
+    // InfinityFree Live Hosting
+    $db_host = 'sql302.infinityfree.com';
+    $db_user = 'if0_43149342';
+    $db_pass = 'Quaddit007';
+    // Change 'quaddit' to your exact database name created in the InfinityFree Control Panel
+    $db_name = 'if0_43149342_quaddit';
+    $db_port = 3306;
+}
 
 try {
-    $pdo = new PDO("mysql:host={$db_host};charset=utf8mb4", $db_user, $db_pass, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES => false,
-    ]);
-
-    // Check if database exists, create from schema if not
-    $stmt = $pdo->query("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{$db_name}'");
-    if (!$stmt->fetch()) {
-        $sql_file = __DIR__ . '/database.sql';
-        if (file_exists($sql_file)) {
-            $pdo->exec(file_get_contents($sql_file));
-        }
-    }
-
-    $pdo = new PDO("mysql:host={$db_host};dbname={$db_name};charset=utf8mb4", $db_user, $db_pass, [
+    $pdo = new PDO("mysql:host={$db_host};dbname={$db_name};port={$db_port};charset=utf8mb4", $db_user, $db_pass, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
