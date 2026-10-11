@@ -13,7 +13,6 @@ A modern, fast, and responsive discussion board web application built for colleg
    - **Delete Discussions**: Delete posts with one click (and automatic cleanup of uploaded images).
    - **Reply on Post**: Interactive inline reply box directly under each post card without leaving the page.
    - **Edit & Delete Replies**: Edit your replies inline or delete them directly on the feed.
-   - **Toggle Save (Bookmarks)**: Instant bookmarking with 1-click filter to view saved discussions (`index.php?view=saved`).
    - **Interactive Likes**: Real-time heart likes with instant count updates.
 
 2. **Clean & Modern X/Twitter-Style UI**:
@@ -30,7 +29,7 @@ The project has been rewritten into a simple, clean, and consolidated structure:
 ```text
 FORUM-OR-DISCUSSION-BOARD/
 │
-├── index.php                 # All-in-one discussion board (Post, View, Edit, Delete, Reply, Edit Reply, Save)
+├── index.php                 # All-in-one discussion board (Post, View, Edit, Delete, Reply, Edit Reply, Likes)
 ├── db.php                    # Simple database connection & session setup
 ├── database.sql              # MySQL database schema and seed data
 ├── login.php                 # User login page
