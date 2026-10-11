@@ -92,12 +92,14 @@ function renderReplyNode($rep, $childrenByParent, $repliesById, $currentUser, $p
       <div class="reply-card">
         <div class="reply-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
           <div class="reply-author" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <img src="<?= e($rep['author_avatar']) ?>" alt="<?= e($rep['author_name']) ?>" class="reply-avatar" style="width: 24px; height: 24px; border-radius: 50%;">
-            <span class="reply-author-name" style="font-size: 13px; font-weight: 700; color: var(--text-main);"><?= e($rep['author_name']) ?></span>
+            <a href="profile.php?id=<?= (int)$rep['user_id'] ?>" style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: inherit;">
+              <img src="<?= e($rep['author_avatar']) ?>" alt="<?= e($rep['author_name']) ?>" class="reply-avatar" style="width: 24px; height: 24px; border-radius: 50%;">
+              <span class="reply-author-name" style="font-size: 13px; font-weight: 700; color: var(--text-main);"><?= e($rep['author_name']) ?></span>
+            </a>
             <?php if (!empty($parentAuthor)): ?>
               <span class="reply-to-tag" style="font-size: 11.5px; color: var(--text-dim); display: inline-flex; align-items: center; gap: 3px;">
                 <span>replied to</span>
-                <span style="color: var(--primary-blue); font-weight: 600;">@<?= e($parentAuthor) ?></span>
+                <a href="profile.php?u=<?= urlencode($parentAuthor) ?>" style="color: var(--primary-blue); font-weight: 600; text-decoration: none;">@<?= e($parentAuthor) ?></a>
               </span>
             <?php endif; ?>
             <span class="reply-timestamp" style="font-size: 12px; color: var(--text-dim);">· <?= time_ago($rep['created_at']) ?></span>
@@ -497,6 +499,14 @@ $recentDiscussions = $pdo->query("
           </a>
         </li>
         <li class="nav-item">
+          <a href="profile.php">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+            </svg>
+            <span>Profile</span>
+          </a>
+        </li>
+        <li class="nav-item">
           <a href="javascript:void(0)" id="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
             <span id="theme-icon-container">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" class="theme-icon-sun" style="display:none;">
@@ -545,6 +555,10 @@ $recentDiscussions = $pdo->query("
           <?= e($currentUser['name']) ?>
           <span style="font-size: 12px; font-weight: 500; color: var(--text-dim); display: block;">@<?= e($currentUser['username']) ?></span>
         </div>
+        <a href="profile.php" style="color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+          View Profile
+        </a>
         <div class="divider"></div>
         <a href="logout.php" style="color: var(--danger-red);">
           <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -637,18 +651,22 @@ $recentDiscussions = $pdo->query("
           ?>
           <article class="post-card" id="post-<?= $postId ?>" data-post-id="<?= $postId ?>" onclick="handlePostCardClick(event, <?= $postId ?>)" style="cursor: pointer;">
             <div class="post-avatar-col">
-              <img src="<?= e($post['author_avatar']) ?>" alt="<?= e($post['author_name']) ?>" class="author-avatar">
+              <a href="profile.php?id=<?= (int)$post['user_id'] ?>" onclick="event.stopPropagation()">
+                <img src="<?= e($post['author_avatar']) ?>" alt="<?= e($post['author_name']) ?>" class="author-avatar">
+              </a>
             </div>
             
             <div class="post-main-col">
               <!-- Post Header: Author, Badge, @username, Timestamp, Topic Badge, 3-dots -->
               <div class="post-header">
                 <div class="post-author-meta">
-                  <span class="author-name"><?= e($post['author_name']) ?></span>
-                  <svg class="verified-badge" viewBox="0 0 24 24" width="18" height="18" fill="#1d9bf0" style="display: inline-block; vertical-align: middle;">
-                    <path d="M22.5 12.5c0-1.58-.875-2.95-2.148-3.6.154-.435.238-.905.238-1.4 0-2.21-1.79-4-4-4-.495 0-.965.084-1.4.238C14.55 2.475 13.18 1.6 11.6 1.6c-1.58 0-2.95.875-3.6 2.148-.435-.154-.905-.238-1.4-.238-2.21 0-4 1.79-4 4 0 .495.084.965.238 1.4C1.575 10.45.7 11.82.7 13.4c0 1.58.875 2.95 2.148 3.6-.154.435-.238.905-.238 1.4 0 2.21 1.79 4 4 4 .495 0 .965-.084 1.4-.238.65 1.273 2.02 2.148 3.6 2.148 1.58 0 2.95-.875 3.6-2.148.435.154.905.238 1.4.238 2.21 0 4-1.79 4-4 0-.495-.084-.965-.238-1.4 1.273-.65 2.148-2.02 2.148-3.6zm-12.87 4.16l-3.29-3.29 1.41-1.41 1.88 1.88 5.18-5.18 1.41 1.41-6.59 6.59z"/>
-                  </svg>
-                  <span class="user-handle">@<?= e($post['author_username']) ?></span>
+                  <a href="profile.php?id=<?= (int)$post['user_id'] ?>" onclick="event.stopPropagation()" style="color: inherit; text-decoration: none; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">
+                    <span class="author-name"><?= e($post['author_name']) ?></span>
+                    <svg class="verified-badge" viewBox="0 0 24 24" width="18" height="18" fill="#1d9bf0" style="display: inline-block; vertical-align: middle;">
+                      <path d="M22.5 12.5c0-1.58-.875-2.95-2.148-3.6.154-.435.238-.905.238-1.4 0-2.21-1.79-4-4-4-.495 0-.965.084-1.4.238C14.55 2.475 13.18 1.6 11.6 1.6c-1.58 0-2.95.875-3.6 2.148-.435-.154-.905-.238-1.4-.238-2.21 0-4 1.79-4 4 0 .495.084.965.238 1.4C1.575 10.45.7 11.82.7 13.4c0 1.58.875 2.95 2.148 3.6-.154.435-.238.905-.238 1.4 0 2.21 1.79 4 4 4 .495 0 .965-.084 1.4-.238.65 1.273 2.02 2.148 3.6 2.148 1.58 0 2.95-.875 3.6-2.148.435.154.905.238 1.4.238 2.21 0 4-1.79 4-4 0-.495-.084-.965-.238-1.4 1.273-.65 2.148-2.02 2.148-3.6zm-12.87 4.16l-3.29-3.29 1.41-1.41 1.88 1.88 5.18-5.18 1.41 1.41-6.59 6.59z"/>
+                    </svg>
+                    <span class="user-handle">@<?= e($post['author_username']) ?></span>
+                  </a>
                   <span class="post-dot">·</span>
                   <span class="post-timestamp"><?= time_ago($post['created_at']) ?></span>
                   <?php if (!empty($post['updated_at'])): ?>
