@@ -1286,28 +1286,29 @@ button, input, textarea, select {
 }
 
 .modal-dialog {
-  background-color: #000000;
-  border: 1px solid #2f3336;
+  background-color: #16181c;
+  border: 1px solid var(--border-color);
   border-radius: 16px;
   width: 100%;
   max-width: 600px;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 25px 50px -12px rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
   animation: modalIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* ================= X COMPOSE DIALOG STYLES ================= */
 .x-compose-dialog {
-  background-color: #000000;
-  border: 1px solid #2f3336;
+  background-color: #16181c;
+  border: 1px solid var(--border-color);
   border-radius: 16px;
   max-width: 600px;
   overflow: hidden;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
 }
 
-[data-theme="light"] .x-compose-dialog {
+[data-theme="light"] .x-compose-dialog,
+[data-theme="light"] .modal-dialog {
   background-color: #ffffff;
   border-color: #cbd5e1;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
@@ -1462,8 +1463,8 @@ button, input, textarea, select {
   top: calc(100% + 6px);
   left: 0;
   min-width: 200px;
-  background-color: #000000;
-  border: 1px solid #2f3336;
+  background-color: #16181c;
+  border: 1px solid var(--border-color);
   border-radius: 14px;
   padding: 6px;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
@@ -1599,20 +1600,32 @@ button, input, textarea, select {
   background-color: rgba(29, 155, 240, 0.1);
 }
 
-.x-compose-submit-btn {
-  background-color: #787a7a;
-  color: #000000;
+.x-compose-submit-btn,
+.composer-post-btn {
+  background-color: #eff3f4;
+  color: #0f1419;
   font-size: 15px;
   font-weight: 700;
   padding: 8px 20px;
   border-radius: 9999px;
   border: none;
   cursor: pointer;
-  transition: opacity 0.15s ease, background-color 0.15s ease;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
-.x-compose-submit-btn:hover {
-  background-color: #eff3f4;
+.x-compose-submit-btn:hover,
+.composer-post-btn:hover {
+  background-color: #d7dbdc;
+  transform: translateY(-1px);
+}
+
+.x-compose-submit-btn:disabled,
+.composer-post-btn:disabled {
+  background-color: rgba(239, 243, 244, 0.4);
+  color: rgba(15, 20, 25, 0.5);
+  cursor: not-allowed;
+  transform: none;
 }
 
 @keyframes modalIn {
@@ -1673,8 +1686,8 @@ button, input, textarea, select {
 }
 
 .form-input, .form-textarea, .form-select {
-  background-color: #000000;
-  border: 1px solid #2f3336;
+  background-color: #202327;
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 12px 16px;
   color: #fff;
@@ -2678,6 +2691,14 @@ button, input, textarea, select {
 
 [data-theme="light"] .profile-tab-count {
   background: rgba(0, 0, 0, 0.06);
+}
+
+.profile-reply-thread-group:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="light"] .profile-reply-thread-group:hover {
+  background-color: rgba(15, 23, 42, 0.03);
 }
 
 

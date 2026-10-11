@@ -895,7 +895,7 @@ $recentDiscussions = $pdo->query("
           <path d="M10.59 12L4.54 5.96l1.42-1.42L12 10.59l6.04-6.05 1.42 1.42L13.41 12l6.05 6.04-1.42 1.42L12 13.41l-6.04 6.05-1.42-1.42L10.59 12z"/>
         </svg>
       </button>
-      <span style="font-weight: 700; color: var(--text-main);">New Discussion</span>
+      <button type="button" class="x-compose-drafts-btn" onclick="alert('No saved drafts.')">Drafts</button>
     </div>
 
     <form action="index.php" method="POST" enctype="multipart/form-data" id="create-post-form">
@@ -908,28 +908,8 @@ $recentDiscussions = $pdo->query("
           <!-- Title Input -->
           <input type="text" name="title" id="post-title" class="x-compose-title-input" placeholder="Title of your discussion..." required>
 
-          <!-- Topic Selector -->
-          <div class="x-custom-select-wrapper" id="x-topic-custom-wrapper">
-            <input type="hidden" name="topic_id" id="post-topic" value="<?= (int)($allTopics[0]['id'] ?? 1) ?>" required>
-            
-            <button type="button" class="x-custom-select-btn" id="x-topic-trigger" onclick="toggleCustomTopicDropdown(event)">
-              <span id="x-topic-label"># <?= e($allTopics[0]['name'] ?? 'Programming') ?></span>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                <path d="M3.543 8.96l1.414-1.42L12 14.59l7.043-7.05 1.414 1.42L12 17.41 3.543 8.96z"/>
-              </svg>
-            </button>
-
-            <div class="x-custom-select-menu" id="x-topic-menu">
-              <?php foreach ($allTopics as $index => $t): ?>
-                <div class="x-custom-select-option <?= $index === 0 ? 'selected' : '' ?>" 
-                     data-value="<?= (int)$t['id'] ?>" 
-                     data-label="# <?= e($t['name']) ?>"
-                     onclick="selectCustomTopic(this, <?= (int)$t['id'] ?>, '# <?= e($t['name']) ?>')">
-                  <span class="x-option-tag"># <?= e($t['name']) ?></span>
-                </div>
-              <?php endforeach; ?>
-            </div>
-          </div>
+          <!-- Default Topic (Hidden) -->
+          <input type="hidden" name="topic_id" id="post-topic" value="<?= (int)($allTopics[0]['id'] ?? 1) ?>">
 
           <!-- Main Textarea -->
           <textarea name="content" id="post-content" class="x-compose-textarea" placeholder="What’s happening?" required></textarea>
@@ -971,14 +951,7 @@ $recentDiscussions = $pdo->query("
           <input type="text" name="title" id="edit-post-title" class="form-input" required>
         </div>
 
-        <div class="form-group">
-          <label class="form-label" for="edit-post-topic">Topic Category</label>
-          <select name="topic_id" id="edit-post-topic" class="form-select" required>
-            <?php foreach ($allTopics as $t): ?>
-              <option value="<?= (int)$t['id'] ?>"><?= e($t['name']) ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
+        <input type="hidden" name="topic_id" id="edit-post-topic" value="1">
 
         <div class="form-group">
           <label class="form-label" for="edit-post-content">Discussion Content</label>

@@ -150,15 +150,9 @@ if ($isOwnProfile) {
 // ========================================================
 $postCount = (int)$pdo->query("SELECT COUNT(*) FROM posts WHERE user_id = {$profileId}")->fetchColumn();
 $replyCount = (int)$pdo->query("SELECT COUNT(*) FROM replies WHERE user_id = {$profileId}")->fetchColumn();
-$commentsOnPostsCount = (int)$pdo->query("
-    SELECT COUNT(*) 
-    FROM replies r 
-    JOIN posts p ON r.post_id = p.id 
-    WHERE p.user_id = {$profileId} AND r.user_id != {$profileId}
-")->fetchColumn();
 
 $tab = $_GET['tab'] ?? 'posts';
-if (!in_array($tab, ['posts', 'replies', 'comments'])) {
+if (!in_array($tab, ['posts', 'replies'])) {
     $tab = 'posts';
 }
 
@@ -193,28 +187,21 @@ if ($tab === 'posts') {
     }
 } elseif ($tab === 'replies') {
     $stmt = $pdo->prepare("
-        SELECT r.*, p.title as post_title, p.id as post_id,
+        SELECT r.*, 
+               p.title as post_title, p.id as post_id, p.content as post_content, p.created_at as post_created_at,
+               pu.id as post_author_id, pu.name as post_author_name, pu.username as post_author_username, pu.avatar as post_author_avatar,
+               pt.name as post_topic_name,
                u.name as author_name, u.username as author_username, u.avatar as author_avatar
         FROM replies r
         JOIN posts p ON r.post_id = p.id
+        JOIN users pu ON p.user_id = pu.id
+        JOIN topics pt ON p.topic_id = pt.id
         JOIN users u ON r.user_id = u.id
         WHERE r.user_id = ?
         ORDER BY r.created_at DESC
     ");
     $stmt->execute([$profileId]);
     $userReplies = $stmt->fetchAll();
-} elseif ($tab === 'comments') {
-    $stmt = $pdo->prepare("
-        SELECT r.*, p.title as post_title, p.id as post_id,
-               ru.name as commenter_name, ru.username as commenter_username, ru.avatar as commenter_avatar, ru.id as commenter_id
-        FROM replies r
-        JOIN posts p ON r.post_id = p.id
-        JOIN users ru ON r.user_id = ru.id
-        WHERE p.user_id = ? AND r.user_id != ?
-        ORDER BY r.created_at DESC
-    ");
-    $stmt->execute([$profileId, $profileId]);
-    $commentsOnPosts = $stmt->fetchAll();
 }
 
 // Fetch Recent Discussions for right sidebar
@@ -440,10 +427,6 @@ $recentDiscussions = $pdo->query("
         <span>Replies</span>
         <span class="profile-tab-count"><?= $replyCount ?></span>
       </a>
-      <a href="profile.php?id=<?= $profileId ?>&tab=comments" class="profile-tab-item <?= $tab === 'comments' ? 'active' : '' ?>">
-        <span>Comments on Posts</span>
-        <span class="profile-tab-count"><?= $commentsOnPostsCount ?></span>
-      </a>
     </div>
 
     <!-- TAB CONTENT: POSTS -->
@@ -515,79 +498,98 @@ $recentDiscussions = $pdo->query("
       <div class="profile-feed-list">
         <?php if (!empty($userReplies)): ?>
           <?php foreach ($userReplies as $rep): ?>
-            <div class="post-card" onclick="window.location.href='index.php?post=<?= (int)$rep['post_id'] ?>#reply-<?= (int)$rep['id'] ?>'" style="cursor: pointer;">
-              <div class="post-avatar-col">
-                <img src="<?= e($profileUser['avatar']) ?>" alt="<?= e($profileUser['name']) ?>" class="author-avatar">
-              </div>
-              <div class="post-main-col">
-                <div style="font-size: 12.5px; color: var(--text-dim); margin-bottom: 4px;">
-                  <span>Replied to </span>
-                  <a href="index.php?post=<?= (int)$rep['post_id'] ?>" style="color: var(--primary-blue); font-weight: 600; text-decoration: none;" onclick="event.stopPropagation()">
-                    "<?= e($rep['post_title']) ?>"
+            <?php 
+              $pId = (int)$rep['post_id'];
+              $repId = (int)$rep['id'];
+            ?>
+            <div class="profile-reply-thread-group" onclick="window.location.href='index.php?post=<?= $pId ?>#reply-<?= $repId ?>'" style="cursor: pointer; border-bottom: 1px solid var(--border-color); padding: 14px 16px; transition: background-color 0.15s ease;">
+              
+              <!-- 1. The Original Post Parent -->
+              <div class="profile-parent-post-row" style="display: flex; gap: 12px; position: relative;">
+                <div class="profile-thread-avatar-col" style="display: flex; flex-direction: column; align-items: center;">
+                  <a href="profile.php?id=<?= (int)$rep['post_author_id'] ?>" onclick="event.stopPropagation()">
+                    <img src="<?= e($rep['post_author_avatar']) ?>" alt="<?= e($rep['post_author_name']) ?>" class="author-avatar" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover;">
                   </a>
-                  <span style="margin-left: 6px;">· <?= time_ago($rep['created_at']) ?></span>
+                  <!-- Vertical connecting thread line -->
+                  <div class="profile-thread-line" style="width: 2px; flex: 1; min-height: 24px; background-color: var(--border-color); margin: 6px 0;"></div>
                 </div>
 
-                <div class="reply-body-text" style="font-size: 14px; color: var(--text-main); line-height: 1.5; margin: 4px 0;">
-                  <?= nl2br(e($rep['content'])) ?>
-                </div>
-
-                <?php if (!empty($rep['image_url'])): ?>
-                  <div style="max-width: 200px; border-radius: 8px; overflow: hidden; margin-top: 8px;" onclick="event.stopPropagation(); openLightbox('<?= e($rep['image_url']) ?>')">
-                    <img src="<?= e($rep['image_url']) ?>" alt="Reply photo" style="width: 100%; height: auto; display: block;">
+                <div class="profile-parent-content-col" style="flex: 1; min-width: 0; padding-bottom: 10px;">
+                  <div class="post-header" style="margin-bottom: 2px;">
+                    <div class="post-author-meta" style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+                      <a href="profile.php?id=<?= (int)$rep['post_author_id'] ?>" onclick="event.stopPropagation()" style="font-weight: 700; color: var(--text-main); text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                        <span><?= e($rep['post_author_name']) ?></span>
+                        <svg class="verified-badge" viewBox="0 0 24 24" width="16" height="16" fill="#1d9bf0">
+                          <path d="M22.5 12.5c0-1.58-.875-2.95-2.148-3.6.154-.435.238-.905.238-1.4 0-2.21-1.79-4-4-4-.495 0-.965.084-1.4.238C14.55 2.475 13.18 1.6 11.6 1.6c-1.58 0-2.95.875-3.6 2.148-.435-.154-.905-.238-1.4-.238-2.21 0-4 1.79-4 4 0 .495.084.965.238 1.4C1.575 10.45.7 11.82.7 13.4c0 1.58.875 2.95 2.148 3.6-.154.435-.238.905-.238 1.4 0 2.21 1.79 4 4 4 .495 0 .965-.084 1.4-.238.65 1.273 2.02 2.148 3.6 2.148 1.58 0 2.95-.875 3.6-2.148.435.154.905.238 1.4.238 2.21 0 4-1.79 4-4 0-.495-.084-.965-.238-1.4 1.273-.65 2.148-2.02 2.148-3.6zm-12.87 4.16l-3.29-3.29 1.41-1.41 1.88 1.88 5.18-5.18 1.41 1.41-6.59 6.59z"/>
+                        </svg>
+                        <span class="user-handle" style="color: var(--text-muted); font-size: 14px;">@<?= e($rep['post_author_username']) ?></span>
+                      </a>
+                      <span class="post-dot" style="color: var(--text-muted);">·</span>
+                      <span class="post-timestamp" style="color: var(--text-muted); font-size: 14px;"><?= time_ago($rep['post_created_at']) ?></span>
+                    </div>
+                    <?php if (!empty($rep['post_topic_name'])): ?>
+                      <span class="post-topic-badge"><?= e($rep['post_topic_name']) ?></span>
+                    <?php endif; ?>
                   </div>
-                <?php endif; ?>
+
+                  <!-- Post Title -->
+                  <div style="font-weight: 700; font-size: 14.5px; color: var(--text-main); margin: 2px 0 4px 0;">
+                    <?= e($rep['post_title']) ?>
+                  </div>
+
+                  <!-- Post snippet -->
+                  <div style="font-size: 13.5px; color: var(--text-muted); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                    <?= e($rep['post_content']) ?>
+                  </div>
+                </div>
               </div>
+
+              <!-- 2. The User's Reply directly below -->
+              <div class="profile-reply-row" style="display: flex; gap: 12px; margin-top: 2px;">
+                <div class="profile-reply-avatar-col" style="flex-shrink: 0;">
+                  <a href="profile.php?id=<?= $profileId ?>" onclick="event.stopPropagation()">
+                    <img src="<?= e($profileUser['avatar']) ?>" alt="<?= e($profileUser['name']) ?>" class="author-avatar" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover;">
+                  </a>
+                </div>
+
+                <div class="profile-reply-content-col" style="flex: 1; min-width: 0;">
+                  <div class="post-author-meta" style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-bottom: 2px;">
+                    <a href="profile.php?id=<?= $profileId ?>" onclick="event.stopPropagation()" style="font-weight: 700; color: var(--text-main); text-decoration: none;">
+                      <?= e($profileUser['name']) ?>
+                    </a>
+                    <span class="user-handle" style="color: var(--text-muted); font-size: 14px;">@<?= e($profileUser['username']) ?></span>
+                    <span class="post-dot" style="color: var(--text-muted);">·</span>
+                    <span class="post-timestamp" style="color: var(--text-muted); font-size: 14px;"><?= time_ago($rep['created_at']) ?></span>
+                    <?php if (!empty($rep['updated_at'])): ?>
+                      <span style="font-size: 11.5px; color: var(--text-dim);">(edited)</span>
+                    <?php endif; ?>
+                  </div>
+
+                  <!-- Subtitle tag -->
+                  <div style="font-size: 12px; color: var(--text-dim); margin-bottom: 4px;">
+                    Replying to <span style="color: var(--primary-blue); font-weight: 600;">@<?= e($rep['post_author_username']) ?></span>
+                  </div>
+
+                  <!-- Reply text content -->
+                  <div class="reply-body-text" style="font-size: 14.5px; color: var(--text-main); line-height: 1.45; word-break: break-word;">
+                    <?= nl2br(e($rep['content'])) ?>
+                  </div>
+
+                  <!-- Reply Image Attachment if present -->
+                  <?php if (!empty($rep['image_url'])): ?>
+                    <div style="max-width: 320px; border-radius: 12px; overflow: hidden; margin-top: 8px; border: 1px solid var(--border-color);" onclick="event.stopPropagation(); openLightbox('<?= e($rep['image_url']) ?>')">
+                      <img src="<?= e($rep['image_url']) ?>" alt="Reply photo" style="width: 100%; height: auto; display: block;">
+                    </div>
+                  <?php endif; ?>
+                </div>
+              </div>
+
             </div>
           <?php endforeach; ?>
         <?php else: ?>
           <div style="padding: 48px 20px; text-align: center; color: var(--text-muted);">
             <div style="font-size: 17px; font-weight: 700; color: var(--text-main); margin-bottom: 6px;">No replies yet</div>
             <p style="font-size: 13.5px;">This user hasn't replied to any discussions yet.</p>
-          </div>
-        <?php endif; ?>
-      </div>
-    <?php endif; ?>
-
-    <!-- TAB CONTENT: COMMENTS ON POSTS -->
-    <?php if ($tab === 'comments'): ?>
-      <div class="profile-feed-list">
-        <?php if (!empty($commentsOnPosts)): ?>
-          <?php foreach ($commentsOnPosts as $c): ?>
-            <div class="post-card" onclick="window.location.href='index.php?post=<?= (int)$c['post_id'] ?>#reply-<?= (int)$c['id'] ?>'" style="cursor: pointer;">
-              <div class="post-avatar-col">
-                <a href="profile.php?id=<?= (int)$c['commenter_id'] ?>" onclick="event.stopPropagation()">
-                  <img src="<?= e($c['commenter_avatar']) ?>" alt="<?= e($c['commenter_name']) ?>" class="author-avatar">
-                </a>
-              </div>
-              <div class="post-main-col">
-                <div style="font-size: 13px; color: var(--text-main); margin-bottom: 4px;">
-                  <a href="profile.php?id=<?= (int)$c['commenter_id'] ?>" style="font-weight: 700; color: inherit; text-decoration: none;" onclick="event.stopPropagation()">
-                    <?= e($c['commenter_name']) ?>
-                  </a>
-                  <span style="color: var(--text-dim);">(@<?= e($c['commenter_username']) ?>) commented on your thread </span>
-                  <a href="index.php?post=<?= (int)$c['post_id'] ?>" style="color: var(--primary-blue); font-weight: 600; text-decoration: none;" onclick="event.stopPropagation()">
-                    "<?= e($c['post_title']) ?>"
-                  </a>
-                  <span style="color: var(--text-dim); margin-left: 6px;">· <?= time_ago($c['created_at']) ?></span>
-                </div>
-
-                <div class="reply-body-text" style="font-size: 14px; color: var(--text-main); line-height: 1.5; margin: 4px 0;">
-                  <?= nl2br(e($c['content'])) ?>
-                </div>
-
-                <?php if (!empty($c['image_url'])): ?>
-                  <div style="max-width: 200px; border-radius: 8px; overflow: hidden; margin-top: 8px;" onclick="event.stopPropagation(); openLightbox('<?= e($c['image_url']) ?>')">
-                    <img src="<?= e($c['image_url']) ?>" alt="Comment photo" style="width: 100%; height: auto; display: block;">
-                  </div>
-                <?php endif; ?>
-              </div>
-            </div>
-          <?php endforeach; ?>
-        <?php else: ?>
-          <div style="padding: 48px 20px; text-align: center; color: var(--text-muted);">
-            <div style="font-size: 17px; font-weight: 700; color: var(--text-main); margin-bottom: 6px;">No comments on discussions</div>
-            <p style="font-size: 13.5px;">No other users have commented on this user's discussion threads yet.</p>
           </div>
         <?php endif; ?>
       </div>
