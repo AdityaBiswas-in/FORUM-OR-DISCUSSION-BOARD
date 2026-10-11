@@ -13,18 +13,9 @@ if (!empty($_SESSION['user_id'])) {
 }
 
 if (!$currentUser) {
-    if (!empty($_COOKIE['campus_remember'])) {
-        $remember_id = (int)explode(':', $_COOKIE['campus_remember'])[0];
-        if ($remember_id > 0) {
-            $stmt = $pdo->prepare("SELECT id, username, email, name, avatar, role, bio, banner_url, created_at FROM users WHERE id = ?");
-            $stmt->execute([$remember_id]);
-            $currentUser = $stmt->fetch();
-        }
-    }
-    if (!$currentUser) {
-        header("Location: login.php");
-        exit;
-    }
+    unset($_SESSION['user_id']);
+    header("Location: login.php");
+    exit;
 }
 
 // Global time_ago helper if not already defined
@@ -164,12 +155,10 @@ $commentsOnPosts = [];
 if ($tab === 'posts') {
     $stmt = $pdo->prepare("
         SELECT p.*, u.name as author_name, u.username as author_username, u.avatar as author_avatar,
-               t.name as topic_name, t.slug as topic_slug,
                (SELECT COUNT(*) FROM replies r WHERE r.post_id = p.id) as reply_count,
                (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id AND l.reply_id IS NULL) as like_count
         FROM posts p
         JOIN users u ON p.user_id = u.id
-        JOIN topics t ON p.topic_id = t.id
         WHERE p.user_id = ?
         ORDER BY p.created_at DESC
     ");
@@ -190,12 +179,10 @@ if ($tab === 'posts') {
         SELECT r.*, 
                p.title as post_title, p.id as post_id, p.content as post_content, p.created_at as post_created_at,
                pu.id as post_author_id, pu.name as post_author_name, pu.username as post_author_username, pu.avatar as post_author_avatar,
-               pt.name as post_topic_name,
                u.name as author_name, u.username as author_username, u.avatar as author_avatar
         FROM replies r
         JOIN posts p ON r.post_id = p.id
         JOIN users pu ON p.user_id = pu.id
-        JOIN topics pt ON p.topic_id = pt.id
         JOIN users u ON r.user_id = u.id
         WHERE r.user_id = ?
         ORDER BY r.created_at DESC
@@ -450,7 +437,6 @@ $recentDiscussions = $pdo->query("
                     <span class="user-handle">@<?= e($post['author_username']) ?></span>
                     <span class="post-timestamp">· <?= time_ago($post['created_at']) ?></span>
                   </div>
-                  <span class="post-topic-badge"><?= e($post['topic_name']) ?></span>
                 </div>
                 
                 <h3 class="post-title" style="margin: 4px 0 8px 0; font-size: 16px;">
@@ -527,9 +513,6 @@ $recentDiscussions = $pdo->query("
                       <span class="post-dot" style="color: var(--text-muted);">·</span>
                       <span class="post-timestamp" style="color: var(--text-muted); font-size: 14px;"><?= time_ago($rep['post_created_at']) ?></span>
                     </div>
-                    <?php if (!empty($rep['post_topic_name'])): ?>
-                      <span class="post-topic-badge"><?= e($rep['post_topic_name']) ?></span>
-                    <?php endif; ?>
                   </div>
 
                   <!-- Post Title -->

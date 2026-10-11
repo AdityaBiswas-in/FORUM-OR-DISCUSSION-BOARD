@@ -32,17 +32,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         if ($stmt->fetch()) {
             $error = 'Username or email is already taken.';
         } else {
-            $hashed = password_hash($password, PASSWORD_BCRYPT);
             $displayName = !empty($name) ? $name : ucfirst($username);
             $avatar = 'assets/images/avatar_default.svg';
 
             $insert = $pdo->prepare("INSERT INTO users (username, email, password, name, avatar, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
-            $insert->execute([$username, $email, $hashed, $displayName, $avatar]);
+            $insert->execute([$username, $email, $password, $displayName, $avatar]);
             $new_id = (int)$pdo->lastInsertId();
 
             // Auto-log in new user and redirect to feed
             $_SESSION['user_id'] = $new_id;
-            set_remember_login($new_id);
             header("Location: index.php");
             exit;
         }

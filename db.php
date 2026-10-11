@@ -51,12 +51,20 @@ if (!function_exists('e')) {
 // Global authentication helpers
 if (!function_exists('is_logged_in')) {
     function is_logged_in() {
-        return !empty($_SESSION['user_id']);
-    }
-}
-
-if (!function_exists('set_remember_login')) {
-    function set_remember_login($user_id) {
-        setcookie('campus_remember', (string)$user_id, time() + (86400 * 30), '/');
+        global $pdo;
+        if (empty($_SESSION['user_id'])) {
+            return false;
+        }
+        if (isset($pdo)) {
+            $stmt = $pdo->prepare("SELECT id FROM users WHERE id = ?");
+            $stmt->execute([$_SESSION['user_id']]);
+            if ($stmt->fetch()) {
+                return true;
+            }
+            // User was deleted/recreated, clean stale session
+            unset($_SESSION['user_id']);
+            return false;
+        }
+        return false;
     }
 }

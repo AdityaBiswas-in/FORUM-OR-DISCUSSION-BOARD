@@ -47,34 +47,7 @@ document.addEventListener('click', (e) => {
     const profileDropdown = document.getElementById('profile-dropdown-menu');
     if (profileDropdown) profileDropdown.classList.remove('active');
   }
-
-  // Close custom topic dropdown
-  if (!e.target.closest('#x-topic-custom-wrapper')) {
-    const topicWrapper = document.getElementById('x-topic-custom-wrapper');
-    if (topicWrapper) topicWrapper.classList.remove('open');
-  }
 });
-
-// 3. Custom Topic Dropdown Handlers
-function toggleCustomTopicDropdown(e) {
-  e.stopPropagation();
-  const wrapper = document.getElementById('x-topic-custom-wrapper');
-  if (wrapper) wrapper.classList.toggle('open');
-}
-
-function selectCustomTopic(el, value, label) {
-  const hiddenInput = document.getElementById('post-topic');
-  const labelSpan = document.getElementById('x-topic-label');
-  const wrapper = document.getElementById('x-topic-custom-wrapper');
-
-  if (hiddenInput) hiddenInput.value = value;
-  if (labelSpan) labelSpan.textContent = label;
-
-  document.querySelectorAll('.x-custom-select-option').forEach(opt => opt.classList.remove('selected'));
-  el.classList.add('selected');
-
-  if (wrapper) wrapper.classList.remove('open');
-}
 
 // 4. Three Dots Menu Toggle
 function togglePostMenu(e, menuId) {
@@ -113,7 +86,7 @@ function closeCreateThreadModal() {
   if (modal) modal.classList.remove('active');
 }
 
-function openEditPostModal(idOrBtn, title, topicId, content) {
+function openEditPostModal(idOrBtn, title, content) {
   document.querySelectorAll('.three-dots-dropdown.show').forEach(el => el.classList.remove('show'));
   
   const modal = document.getElementById('edit-post-modal');
@@ -125,7 +98,6 @@ function openEditPostModal(idOrBtn, title, topicId, content) {
     const btn = idOrBtn;
     id = btn.getAttribute('data-id');
     title = btn.getAttribute('data-title') || '';
-    topicId = btn.getAttribute('data-topic') || 1;
     content = btn.getAttribute('data-content') || '';
     const imgData = btn.getAttribute('data-images');
     if (imgData) {
@@ -139,7 +111,6 @@ function openEditPostModal(idOrBtn, title, topicId, content) {
 
   document.getElementById('edit-post-id').value = id || '';
   document.getElementById('edit-post-title').value = title || '';
-  document.getElementById('edit-post-topic').value = topicId || 1;
   document.getElementById('edit-post-content').value = content || '';
   
   // Remove any previously appended delete_image_ids hidden inputs

@@ -7,8 +7,8 @@ A modern, fast, and responsive discussion board web application built for colleg
 ## 🌟 Key Features (All in `index.php`)
 
 1. **All-in-One Discussion Board**:
-   - **Post Discussions**: Create threads with titles, topics, and up to 4 image attachments.
-   - **See Posts**: Live feed with search by keyword and topic pill filters (# Programming, # College, # Campus Life, # Events, # Career).
+   - **Post Discussions**: Create threads with titles and up to 4 image attachments.
+   - **See Posts**: Live feed with instant search by keyword.
    - **Edit Discussions**: Edit your own posts via inline controls or modal dialog.
    - **Delete Discussions**: Delete posts with one click (and automatic cleanup of uploaded images).
    - **Reply on Post**: Interactive inline reply box directly under each post card without leaving the page.

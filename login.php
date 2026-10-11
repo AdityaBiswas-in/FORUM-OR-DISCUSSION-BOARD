@@ -41,9 +41,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $targetUser = $stmt->fetch();
 
             if ($targetUser) {
-                $new_hash = password_hash($new_pass, PASSWORD_BCRYPT);
                 $upd = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
-                $upd->execute([$new_hash, (int)$targetUser['id']]);
+                $upd->execute([$new_pass, (int)$targetUser['id']]);
                 header("Location: login.php?reset=1");
                 exit;
             } else {
@@ -53,7 +52,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     } else {
         $login_input = trim($_POST['login_input'] ?? '');
         $password = $_POST['password'] ?? '';
-        $remember = isset($_POST['remember']);
 
         if (empty($login_input) || empty($password)) {
             $error = 'Please fill in all fields.';
@@ -63,11 +61,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $stmt->execute([$login_input, $login_input, $login_input]);
             $user = $stmt->fetch();
 
-            if ($user && password_verify($password, $user['password'])) {
-                $_SESSION['user_id'] = (int)$user['id'];
-                if ($remember) {
-                    set_remember_login($user['id']);
+            $passwordMatches = false;
+            if ($user) {
+                if ($user['password'] === $password) {
+                    $passwordMatches = true;
+                } elseif (password_verify($password, $user['password'])) {
+                    $passwordMatches = true;
                 }
+            }
+
+            if ($user && $passwordMatches) {
+                $_SESSION['user_id'] = (int)$user['id'];
                 header("Location: index.php");
                 exit;
             } else {
@@ -193,12 +197,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
           </button>
         </div>
 
-        <!-- Options row (Remember me & Forgot pass) -->
-        <div class="auth-options-row">
-          <label class="remember-label">
-            <input type="checkbox" name="remember" class="remember-checkbox" checked>
-            <span>Remember me</span>
-          </label>
+        <!-- Options row (Forgot pass) -->
+        <div class="auth-options-row" style="justify-content: flex-end;">
           <a href="#reset" class="forgot-link" onclick="openResetModal(); return false;">Forgot password?</a>
         </div>
 

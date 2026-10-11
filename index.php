@@ -13,20 +13,10 @@ if (!empty($_SESSION['user_id'])) {
     $currentUser = $stmt->fetch();
 }
 
-// Fallback: If not logged in in session, check remember cookie or use default student
 if (!$currentUser) {
-    if (!empty($_COOKIE['campus_remember'])) {
-        $remember_id = (int)explode(':', $_COOKIE['campus_remember'])[0];
-        if ($remember_id > 0) {
-            $stmt = $pdo->prepare("SELECT id, username, email, name, avatar, role, bio FROM users WHERE id = ?");
-            $stmt->execute([$remember_id]);
-            $currentUser = $stmt->fetch();
-        }
-    }
-    if (!$currentUser) {
-        header("Location: login.php");
-        exit;
-    }
+    unset($_SESSION['user_id']);
+    header("Location: login.php");
+    exit;
 }
 
 // ========================================================
@@ -207,10 +197,9 @@ $action = $_POST['action'] ?? $_GET['action'] ?? '';
 if ($action === 'create_post' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $title = trim($_POST['title'] ?? '');
     $content = trim($_POST['content'] ?? '');
-    $topic_id = (int)($_POST['topic_id'] ?? 1);
     if (!empty($title) && !empty($content)) {
-        $stmt = $pdo->prepare("INSERT INTO posts (user_id, topic_id, title, content, created_at) VALUES (?, ?, ?, ?, NOW())");
-        $stmt->execute([$currentUser['id'], $topic_id, $title, $content]);
+        $stmt = $pdo->prepare("INSERT INTO posts (user_id, title, content, created_at) VALUES (?, ?, ?, NOW())");
+        $stmt->execute([$currentUser['id'], $title, $content]);
         $post_id = $pdo->lastInsertId();
         upload_post_images($_FILES['images'] ?? null, $post_id, $pdo);
         header("Location: index.php?msg=created#post-" . $post_id);
@@ -225,7 +214,6 @@ if ($action === 'edit_post' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $post_id = (int)($_POST['post_id'] ?? 0);
     $title = trim($_POST['title'] ?? '');
     $content = trim($_POST['content'] ?? '');
-    $topic_id = (int)($_POST['topic_id'] ?? 1);
     $delete_image_ids = $_POST['delete_image_ids'] ?? [];
 
     $stmt = $pdo->prepare("SELECT user_id FROM posts WHERE id = ?");
@@ -233,8 +221,8 @@ if ($action === 'edit_post' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $p = $stmt->fetch();
 
     if ($p && (int)$p['user_id'] === (int)$currentUser['id'] && !empty($title) && !empty($content)) {
-        $stmt = $pdo->prepare("UPDATE posts SET title = ?, topic_id = ?, content = ?, updated_at = NOW() WHERE id = ?");
-        $stmt->execute([$title, $topic_id, $content, $post_id]);
+        $stmt = $pdo->prepare("UPDATE posts SET title = ?, content = ?, updated_at = NOW() WHERE id = ?");
+        $stmt->execute([$title, $content, $post_id]);
 
         // Delete any existing images requested for removal
         if (!empty($delete_image_ids) && is_array($delete_image_ids)) {
@@ -365,9 +353,8 @@ if ($action === 'toggle_like') {
 }
 
 // ========================================================
-// 4. FETCH DATA FOR VIEW (POSTS, TOPICS, REPLIES)
+// 4. FETCH DATA FOR VIEW (POSTS, REPLIES)
 // ========================================================
-$current_topic_slug = $_GET['topic'] ?? '';
 $search_query       = trim($_GET['q'] ?? '');
 $single_post_id     = (int)($_GET['post'] ?? $_GET['id'] ?? 0);
 
@@ -378,10 +365,6 @@ if ($single_post_id > 0) {
     $where[]  = "p.id = ?";
     $params[] = $single_post_id;
 } else {
-    if (!empty($current_topic_slug)) {
-        $where[]  = "t.slug = ?";
-        $params[] = $current_topic_slug;
-    }
     if (!empty($search_query)) {
         $where[]  = "(p.title LIKE ? OR p.content LIKE ?)";
         $params[] = "%{$search_query}%";
@@ -391,13 +374,11 @@ if ($single_post_id > 0) {
 
 $sql = "
     SELECT p.*, u.name as author_name, u.username as author_username, u.avatar as author_avatar,
-           t.name as topic_name, t.slug as topic_slug,
            (SELECT COUNT(*) FROM replies r WHERE r.post_id = p.id) as reply_count,
            (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id AND l.reply_id IS NULL) as like_count,
            (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id AND l.user_id = ?) as is_liked
     FROM posts p
     JOIN users u ON p.user_id = u.id
-    JOIN topics t ON p.topic_id = t.id
 ";
 if (!empty($where)) {
     $sql .= " WHERE " . implode(" AND ", $where);
@@ -441,9 +422,6 @@ if (!empty($post_ids)) {
         $repliesByPost[$r['post_id']][] = $r;
     }
 }
-
-// All Topics for Pills & Composer
-$allTopics = $pdo->query("SELECT * FROM topics ORDER BY id ASC")->fetchAll();
 
 // Recent Discussions for right sidebar
 $recentDiscussions = $pdo->query("
@@ -584,9 +562,6 @@ $recentDiscussions = $pdo->query("
           <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
         </svg>
         <input type="text" name="q" placeholder="Search discussions..." value="<?= e($search_query) ?>" autocomplete="off">
-        <?php if (!empty($current_topic_slug)): ?>
-          <input type="hidden" name="topic" value="<?= e($current_topic_slug) ?>">
-        <?php endif; ?>
       </form>
     </div>
 
@@ -603,16 +578,6 @@ $recentDiscussions = $pdo->query("
         <span style="font-size: 13px; font-weight: 600; color: var(--text-dim);">Discussion View</span>
       </div>
     <?php else: ?>
-      <!-- Quick Topic Pills Filter -->
-      <div class="topic-pills-bar">
-        <a href="index.php" class="topic-pill <?= empty($current_topic_slug) ? 'active' : '' ?>">All Topics</a>
-        <?php foreach ($allTopics as $top): ?>
-          <a href="index.php?topic=<?= e($top['slug']) ?>" class="topic-pill <?= ($current_topic_slug === $top['slug']) ? 'active' : '' ?>">
-            # <?= e($top['name']) ?>
-          </a>
-        <?php endforeach; ?>
-      </div>
-
       <!-- Quick Composer Trigger (Opens compose modal or writes inline) -->
       <div class="x-quick-composer" onclick="openCreateThreadModal()">
         <img src="<?= e($currentUser['avatar']) ?>" alt="<?= e($currentUser['name']) ?>" class="composer-avatar">
@@ -657,7 +622,7 @@ $recentDiscussions = $pdo->query("
             </div>
             
             <div class="post-main-col">
-              <!-- Post Header: Author, Badge, @username, Timestamp, Topic Badge, 3-dots -->
+              <!-- Post Header: Author, Badge, @username, Timestamp, 3-dots -->
               <div class="post-header">
                 <div class="post-author-meta">
                   <a href="profile.php?id=<?= (int)$post['user_id'] ?>" onclick="event.stopPropagation()" style="color: inherit; text-decoration: none; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">
@@ -675,8 +640,6 @@ $recentDiscussions = $pdo->query("
                 </div>
 
                 <div class="post-header-right">
-                  <span class="post-topic-badge"><?= e($post['topic_name']) ?></span>
-                  
                   <!-- 3-Dots Action Menu (Author only) -->
                   <?php if ($isAuthor): ?>
                   <div class="post-actions-menu" onclick="event.stopPropagation()">
@@ -689,7 +652,6 @@ $recentDiscussions = $pdo->query("
                       <button type="button" 
                               data-id="<?= $postId ?>" 
                               data-title="<?= e($post['title']) ?>" 
-                              data-topic="<?= (int)$post['topic_id'] ?>" 
                               data-content="<?= e($post['content']) ?>" 
                               data-images='<?= htmlspecialchars(json_encode($postImagesData[$postId] ?? []), ENT_QUOTES, 'UTF-8') ?>'
                               onclick="openEditPostModal(this)">
@@ -908,9 +870,6 @@ $recentDiscussions = $pdo->query("
           <!-- Title Input -->
           <input type="text" name="title" id="post-title" class="x-compose-title-input" placeholder="Title of your discussion..." required>
 
-          <!-- Default Topic (Hidden) -->
-          <input type="hidden" name="topic_id" id="post-topic" value="<?= (int)($allTopics[0]['id'] ?? 1) ?>">
-
           <!-- Main Textarea -->
           <textarea name="content" id="post-content" class="x-compose-textarea" placeholder="What’s happening?" required></textarea>
 
@@ -950,8 +909,6 @@ $recentDiscussions = $pdo->query("
           <label class="form-label" for="edit-post-title">Thread Title</label>
           <input type="text" name="title" id="edit-post-title" class="form-input" required>
         </div>
-
-        <input type="hidden" name="topic_id" id="edit-post-topic" value="1">
 
         <div class="form-group">
           <label class="form-label" for="edit-post-content">Discussion Content</label>
@@ -1051,7 +1008,7 @@ function togglePostMenu(e, menuId) {
   }
 }
 
-function openEditPostModal(idOrBtn, title, topicId, content) {
+function openEditPostModal(idOrBtn, title, content) {
   document.querySelectorAll('.three-dots-dropdown.show').forEach(el => el.classList.remove('show'));
   
   const modal = document.getElementById('edit-post-modal');
@@ -1063,7 +1020,6 @@ function openEditPostModal(idOrBtn, title, topicId, content) {
     const btn = idOrBtn;
     id = btn.getAttribute('data-id');
     title = btn.getAttribute('data-title') || '';
-    topicId = btn.getAttribute('data-topic') || 1;
     content = btn.getAttribute('data-content') || '';
     const imgData = btn.getAttribute('data-images');
     if (imgData) {
@@ -1077,12 +1033,10 @@ function openEditPostModal(idOrBtn, title, topicId, content) {
 
   const idInput = document.getElementById('edit-post-id');
   const titleInput = document.getElementById('edit-post-title');
-  const topicInput = document.getElementById('edit-post-topic');
   const contentInput = document.getElementById('edit-post-content');
 
   if (idInput) idInput.value = id || '';
   if (titleInput) titleInput.value = title || '';
-  if (topicInput) topicInput.value = topicId || 1;
   if (contentInput) contentInput.value = content || '';
 
   // Remove any previously appended delete_image_ids hidden inputs
