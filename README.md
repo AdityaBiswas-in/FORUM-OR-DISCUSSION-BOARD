@@ -1,4 +1,4 @@
-# CampusForum - College Discussion Board & Community
+# Quaddit - College Discussion Board & Community
 
 A modern, fast, and responsive discussion board web application built for college campuses using **PHP & MySQL**. Streamlined into a simple, single-file architecture in `index.php`.
 

@@ -437,10 +437,10 @@ $recentDiscussions = $pdo->query("
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CampusForum - College Discussion Board</title>
-  <meta name="description" content="CampusForum is the modern discussion board for college students to share questions, images, setups, and campus moments.">
+  <title>Quaddit - College Discussion Board</title>
+  <meta name="description" content="Quaddit is the modern discussion board for college students to share questions, images, setups, and campus moments.">
   <link rel="stylesheet" href="assets/css/style.css?v=<?= file_exists(__DIR__ . '/assets/css/style.css') ? filemtime(__DIR__ . '/assets/css/style.css') : time() ?>">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2338bdf8'><path d='M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z'/></svg>">
+  <link rel="icon" type="image/jpeg" href="assets/images/logo.jpg">
   <script>
     (function() {
       const savedTheme = localStorage.getItem('campus_theme') || 'dark';
@@ -459,11 +459,9 @@ $recentDiscussions = $pdo->query("
       <!-- Brand Logo -->
       <a href="index.php" class="brand-header">
         <div class="brand-logo-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-          </svg>
+          <img src="assets/images/logo.jpg" alt="Quaddit Logo" class="brand-logo-img">
         </div>
-        <div class="brand-text">Campus<span>Forum</span></div>
+        <div class="brand-text">Quad<span>dit</span></div>
       </a>
 
       <!-- Navigation Menu -->

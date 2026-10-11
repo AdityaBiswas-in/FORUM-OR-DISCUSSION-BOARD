@@ -52,9 +52,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Create an Account | CampusForum</title>
+  <title>Create an Account | Quaddit</title>
+  <link rel="icon" type="image/jpeg" href="assets/images/logo.jpg">
   <link rel="stylesheet" href="assets/css/auth.css?v=<?= time() ?>">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2338bdf8'><path d='M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z'/></svg>">
   <style>
     /* Direct inline autofill reset to override browser defaults immediately */
     input:-webkit-autofill,
@@ -102,18 +102,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     <!-- Brand Header -->
     <div class="auth-header-branding">
       <div class="auth-logo-bubbles">
-        <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-        </svg>
+        <img src="assets/images/logo.jpg" alt="Quaddit Logo" style="width: 100%; height: 100%; border-radius: 12px; object-fit: cover;">
       </div>
-      <h1 class="auth-brand-title">Campus<span>Forum</span></h1>
+      <h1 class="auth-brand-title">Quad<span>dit</span></h1>
       <p class="auth-tagline">Share ideas. Ask questions. Grow together.</p>
     </div>
 
     <!-- Register Frosted Card -->
     <div class="auth-card">
       <h2 class="auth-card-title">Create an Account</h2>
-      <p class="auth-card-subtitle">Join CampusForum and start discussing</p>
+      <p class="auth-card-subtitle">Join Quaddit and start discussing</p>
 
       <?php if (!empty($error)): ?>
         <div class="auth-alert auth-alert-error">

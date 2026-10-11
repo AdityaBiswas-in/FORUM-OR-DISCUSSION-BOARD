@@ -1,4 +1,4 @@
--- CampusForum Database Schema
+-- Quaddit Database Schema
 -- Compatible with MySQL / MariaDB (XAMPP / phpMyAdmin)
 
 CREATE DATABASE IF NOT EXISTS `campus_forum` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `avatar` VARCHAR(255) DEFAULT 'assets/images/avatar_default.svg',
   `banner_url` VARCHAR(255) NULL DEFAULT NULL,
   `role` VARCHAR(20) DEFAULT 'student',
-  `bio` VARCHAR(255) DEFAULT 'CampusForum member',
+  `bio` VARCHAR(255) DEFAULT 'Quaddit member',
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

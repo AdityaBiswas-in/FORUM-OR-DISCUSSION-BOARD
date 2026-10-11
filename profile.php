@@ -206,7 +206,8 @@ $recentDiscussions = $pdo->query("
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?= e($profileUser['name']) ?> (@<?= e($profileUser['username']) ?>) - CampusForum</title>
+  <title><?= e($profileUser['name']) ?> (@<?= e($profileUser['username']) ?>) - Quaddit</title>
+  <link rel="icon" type="image/jpeg" href="assets/images/logo.jpg">
   <link rel="stylesheet" href="assets/css/style.css?v=<?= filemtime(__DIR__ . '/assets/css/style.css') ?>">
   <script>
     (function() {
@@ -227,11 +228,9 @@ $recentDiscussions = $pdo->query("
       <!-- Brand Logo -->
       <a href="index.php" class="brand-header">
         <div class="brand-logo-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-          </svg>
+          <img src="assets/images/logo.jpg" alt="Quaddit Logo" class="brand-logo-img">
         </div>
-        <div class="brand-text">Campus<span>Forum</span></div>
+        <div class="brand-text">Quad<span>dit</span></div>
       </a>
 
       <!-- Navigation Menu -->
@@ -521,7 +520,7 @@ $recentDiscussions = $pdo->query("
                   </div>
 
                   <!-- Post snippet -->
-                  <div style="font-size: 13.5px; color: var(--text-muted); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                  <div style="font-size: 13.5px; color: var(--text-muted); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
                     <?= e($rep['post_content']) ?>
                   </div>
                 </div>
