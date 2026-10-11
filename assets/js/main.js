@@ -120,12 +120,21 @@ function openEditPostModal(idOrBtn, title, topicId, content) {
   if (!modal) return;
 
   let id = idOrBtn;
+  let rawImages = [];
   if (typeof idOrBtn === 'object' && idOrBtn !== null) {
     const btn = idOrBtn;
     id = btn.getAttribute('data-id');
     title = btn.getAttribute('data-title') || '';
     topicId = btn.getAttribute('data-topic') || 1;
     content = btn.getAttribute('data-content') || '';
+    const imgData = btn.getAttribute('data-images');
+    if (imgData) {
+      try {
+        rawImages = JSON.parse(imgData);
+      } catch (e) {
+        rawImages = [];
+      }
+    }
   }
 
   document.getElementById('edit-post-id').value = id || '';
@@ -133,10 +142,84 @@ function openEditPostModal(idOrBtn, title, topicId, content) {
   document.getElementById('edit-post-topic').value = topicId || 1;
   document.getElementById('edit-post-content').value = content || '';
   
+  // Remove any previously appended delete_image_ids hidden inputs
+  const form = document.getElementById('edit-post-form');
+  if (form) {
+    form.querySelectorAll('input[name="delete_image_ids[]"]').forEach(el => el.remove());
+  }
+
+  // Render current existing images with delete/remove button
+  const existingGroup = document.getElementById('edit-existing-images-group');
+  const existingContainer = document.getElementById('edit-existing-images-container');
+  if (existingGroup && existingContainer) {
+    existingContainer.innerHTML = '';
+    if (rawImages && rawImages.length > 0) {
+      existingGroup.style.display = 'block';
+      rawImages.forEach(img => {
+        const item = document.createElement('div');
+        item.className = 'existing-img-card';
+        item.id = `existing-img-${img.id}`;
+        
+        item.innerHTML = `
+          <img src="${img.url}" alt="Post image">
+          <button type="button" class="btn-remove-existing-img" onclick="removeExistingImage(${img.id}, this)" title="Remove image">✕</button>
+        `;
+        existingContainer.appendChild(item);
+      });
+    } else {
+      existingGroup.style.display = 'none';
+    }
+  }
+
+  // Reset file input and preview strip for new uploads
   const editPreviewStrip = document.getElementById('edit-image-previews');
   if (editPreviewStrip) editPreviewStrip.innerHTML = '';
+  const fileInput = document.getElementById('edit-images-input');
+  if (fileInput) fileInput.value = '';
 
   modal.classList.add('active');
+}
+
+function removeExistingImage(imageId, btn) {
+  const card = document.getElementById(`existing-img-${imageId}`);
+  if (card) {
+    card.classList.add('marked-for-delete');
+    
+    // Replace remove button with undo button
+    btn.outerHTML = `
+      <button type="button" class="btn-undo-existing-img" onclick="undoRemoveExistingImage(${imageId}, this)" title="Undo remove">↩</button>
+      <div class="delete-badge">Delete</div>
+    `;
+
+    // Append hidden input to notify backend to delete this image
+    const form = document.getElementById('edit-post-form');
+    if (form && !document.getElementById(`input-del-img-${imageId}`)) {
+      const hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.name = 'delete_image_ids[]';
+      hidden.id = `input-del-img-${imageId}`;
+      hidden.value = imageId;
+      form.appendChild(hidden);
+    }
+  }
+}
+
+function undoRemoveExistingImage(imageId, btn) {
+  const card = document.getElementById(`existing-img-${imageId}`);
+  if (card) {
+    card.classList.remove('marked-for-delete');
+    
+    // Remove the delete badge and restore remove button
+    const badge = card.querySelector('.delete-badge');
+    if (badge) badge.remove();
+
+    btn.outerHTML = `
+      <button type="button" class="btn-remove-existing-img" onclick="removeExistingImage(${imageId}, this)" title="Remove image">✕</button>
+    `;
+
+    const hidden = document.getElementById(`input-del-img-${imageId}`);
+    if (hidden) hidden.remove();
+  }
 }
 
 function closeEditPostModal() {
@@ -151,25 +234,21 @@ function confirmDeletePost(id) {
   }
 }
 
-// Copy link directly pointing to discussion in index.php
-function copyThreadLink(id) {
-  const url = `${window.location.origin}${window.location.pathname.replace(/\/[^\/]*$/, '')}/index.php#post-${id}`;
-  navigator.clipboard.writeText(url).then(() => {
-    showToast('Discussion link copied to clipboard!');
-  }).catch(() => {
-    showToast('Link: ' + url);
-  });
-}
 
 // 7. Inline Replies Accordion & Scroll Helpers
 function toggleRepliesSection(postId) {
   const section = document.getElementById(`replies-section-${postId}`);
   if (!section) return;
-  const isHidden = section.style.display === 'none' || section.style.display === '';
+  const isHidden = window.getComputedStyle(section).display === 'none';
   section.style.display = isHidden ? 'block' : 'none';
   if (isHidden) {
     const textarea = section.querySelector('textarea');
-    if (textarea) textarea.focus();
+    if (textarea) {
+      setTimeout(() => {
+        textarea.focus();
+        textarea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 50);
+    }
   }
 }
 
@@ -183,9 +262,9 @@ function expandPost(postId) {
 function toggleNestedComposer(replyId) {
   const composer = document.getElementById(`nested-composer-${replyId}`);
   if (composer) {
-    const isVisible = composer.style.display === 'block';
-    composer.style.display = isVisible ? 'none' : 'block';
-    if (!isVisible) {
+    const isHidden = window.getComputedStyle(composer).display === 'none';
+    composer.style.display = isHidden ? 'block' : 'none';
+    if (isHidden) {
       const textarea = composer.querySelector('textarea');
       if (textarea) textarea.focus();
     }
@@ -197,17 +276,29 @@ function toggleEditReplyForm(replyId) {
   const formEl = document.getElementById(`reply-edit-form-${replyId}`);
 
   if (textEl && formEl) {
-    if (formEl.style.display === 'none' || formEl.style.display === '') {
-      formEl.style.display = 'block';
-      textEl.style.display = 'none';
+    const isHidden = window.getComputedStyle(formEl).display === 'none';
+    formEl.style.display = isHidden ? 'block' : 'none';
+    textEl.style.display = isHidden ? 'none' : 'block';
+    if (isHidden) {
       const ta = formEl.querySelector('textarea');
       if (ta) ta.focus();
-    } else {
-      formEl.style.display = 'none';
-      textEl.style.display = 'block';
     }
   }
 }
+
+function handlePostCardClick(event, postId) {
+  const target = event.target;
+  if (target.closest('button, a, input, textarea, label, .post-actions-menu, .post-replies-collapse, .post-media-grid, .post-action-btn, .reply-card')) {
+    return;
+  }
+  window.location.href = 'index.php?post=' + postId;
+}
+
+window.handlePostCardClick = handlePostCardClick;
+window.toggleRepliesSection = toggleRepliesSection;
+window.expandPost = expandPost;
+window.toggleNestedComposer = toggleNestedComposer;
+window.toggleEditReplyForm = toggleEditReplyForm;
 
 // 8. Image Selection Previews
 function handleImageSelection(input) {
@@ -244,18 +335,38 @@ function handleEditImageSelection(input) {
   previewContainer.innerHTML = '';
 
   const files = Array.from(input.files);
-  files.slice(0, 4).forEach((file) => {
+  files.slice(0, 4).forEach((file, index) => {
     if (!file.type.startsWith('image/')) return;
     const reader = new FileReader();
     reader.onload = (e) => {
       const thumb = document.createElement('div');
       thumb.className = 'preview-thumb-container';
-      thumb.innerHTML = `<img src="${e.target.result}" alt="Preview">`;
+      thumb.style.cssText = 'position: relative; width: 70px; height: 70px; border-radius: 8px; overflow: hidden; display: inline-block; margin-right: 8px; margin-top: 8px; border: 1px solid var(--border-color);';
+      thumb.innerHTML = `
+        <img src="${e.target.result}" alt="Preview" style="width: 100%; height: 100%; object-fit: cover;">
+        <button type="button" class="btn-remove-thumb" onclick="removeSelectedEditFile(this)" style="position: absolute; top: 3px; right: 3px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,0.75); color: #fff; border: none; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
+      `;
       previewContainer.appendChild(thumb);
     };
     reader.readAsDataURL(file);
   });
 }
+
+function removeSelectedEditFile(btn) {
+  btn.closest('.preview-thumb-container').remove();
+  const previewContainer = document.getElementById('edit-image-previews');
+  if (previewContainer && previewContainer.children.length === 0) {
+    const fileInput = document.getElementById('edit-images-input');
+    if (fileInput) fileInput.value = '';
+  }
+}
+
+window.openEditPostModal = openEditPostModal;
+window.closeEditPostModal = closeEditPostModal;
+window.removeExistingImage = removeExistingImage;
+window.undoRemoveExistingImage = undoRemoveExistingImage;
+window.handleEditImageSelection = handleEditImageSelection;
+window.removeSelectedEditFile = removeSelectedEditFile;
 
 function previewReplyImage(input, postId) {
   const strip = document.getElementById(`reply-preview-${postId}`);
@@ -316,42 +427,6 @@ function toggleLikePost(e, postId) {
   })
   .catch(err => {
     console.error('Like toggle error:', err);
-  });
-}
-
-function toggleSavePost(e, postId) {
-  if (e) e.stopPropagation();
-  const btn = document.getElementById(`save-btn-${postId}`);
-
-  const formData = new FormData();
-  formData.append('action', 'toggle_save');
-  formData.append('post_id', postId);
-
-  fetch('index.php', {
-    method: 'POST',
-    body: formData,
-    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-  })
-  .then(res => res.json())
-  .then(data => {
-    if (data.success) {
-      if (btn) {
-        if (data.saved) {
-          btn.classList.add('active-saved');
-          btn.querySelector('svg').setAttribute('fill', 'currentColor');
-          showToast('Saved to your bookmarks!');
-        } else {
-          btn.classList.remove('active-saved');
-          btn.querySelector('svg').setAttribute('fill', 'none');
-          showToast('Removed from saved.');
-        }
-      } else {
-        showToast(data.saved ? 'Discussion saved!' : 'Discussion unsaved.');
-      }
-    }
-  })
-  .catch(err => {
-    console.error('Save toggle error:', err);
   });
 }
 

@@ -1729,6 +1729,103 @@ button, input, textarea, select {
   cursor: pointer;
 }
 
+.existing-images-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.existing-img-card {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background: #000;
+  transition: opacity 0.2s, filter 0.2s, border-color 0.2s;
+}
+
+.existing-img-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.btn-remove-existing-img {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+  transition: transform 0.15s, background 0.15s;
+  z-index: 2;
+}
+
+.btn-remove-existing-img:hover {
+  background: #dc2626;
+  transform: scale(1.1);
+}
+
+.btn-undo-existing-img {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #10b981;
+  color: #fff;
+  border: none;
+  font-size: 11px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+  z-index: 2;
+  transition: transform 0.15s;
+}
+
+.btn-undo-existing-img:hover {
+  transform: scale(1.1);
+}
+
+.existing-img-card.marked-for-delete {
+  opacity: 0.35;
+  filter: grayscale(1);
+  border: 2px dashed #ef4444;
+}
+
+.existing-img-card .delete-badge {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(239, 68, 68, 0.9);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  padding: 2px 0;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
 .modal-footer {
   padding: 16px 24px;
   border-top: 1px solid var(--border-color);
@@ -1767,6 +1864,77 @@ button, input, textarea, select {
 
 .btn-modal-submit:hover {
   background: var(--primary-blue-hover);
+}
+
+/* ================= THREADED / NESTED REPLIES ================= */
+.replies-tree-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.reply-thread-item {
+  position: relative;
+}
+
+.reply-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px 14px;
+  position: relative;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.reply-card:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+[data-theme="light"] .reply-card {
+  background-color: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .reply-card:hover {
+  border-color: #cbd5e1;
+}
+
+.reply-children-list {
+  margin-left: 20px;
+  padding-left: 14px;
+  border-left: 2px solid rgba(255, 255, 255, 0.1);
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+}
+
+[data-theme="light"] .reply-children-list {
+  border-left-color: #cbd5e1;
+}
+
+.reply-to-tag {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(29, 155, 240, 0.08);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+[data-theme="light"] .reply-to-tag {
+  background: rgba(29, 155, 240, 0.1);
+}
+
+@media (max-width: 600px) {
+  .reply-children-list {
+    margin-left: 10px;
+    padding-left: 8px;
+  }
 }
 
 /* ================= THREAD DETAIL VIEW (thread.php) ================= */
@@ -1823,20 +1991,31 @@ button, input, textarea, select {
 
 .reply-textarea {
   width: 100%;
-  background: #000000;
-  border: 1px solid #2f3336;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: 14px;
   padding: 14px 16px;
-  color: #fff;
+  color: var(--text-main);
   font-size: 15px;
-  min-height: 95px;
+  min-height: 80px;
   outline: none;
   margin-bottom: 12px;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, background-color 0.2s;
 }
 
 .reply-textarea:focus {
-  border-color: #1d9bf0;
+  border-color: var(--primary-blue);
+}
+
+[data-theme="light"] .reply-textarea {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light"] .reply-card {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
 }
 
 .reply-composer-actions {

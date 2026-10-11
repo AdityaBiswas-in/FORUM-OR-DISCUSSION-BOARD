@@ -40,3 +40,23 @@ try {
 } catch (PDOException $e) {
     die("Database Connection Error: " . htmlspecialchars($e->getMessage()));
 }
+
+// Global sanitization helper
+if (!function_exists('e')) {
+    function e($str) {
+        return htmlspecialchars($str ?? '', ENT_QUOTES, 'UTF-8');
+    }
+}
+
+// Global authentication helpers
+if (!function_exists('is_logged_in')) {
+    function is_logged_in() {
+        return !empty($_SESSION['user_id']);
+    }
+}
+
+if (!function_exists('set_remember_login')) {
+    function set_remember_login($user_id) {
+        setcookie('campus_remember', (string)$user_id, time() + (86400 * 30), '/');
+    }
+}

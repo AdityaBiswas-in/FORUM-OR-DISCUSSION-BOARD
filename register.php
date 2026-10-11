@@ -1,23 +1,24 @@
 <?php
-// register.php - CampusForum Sign Up Screen matching Image 2
+// register.php - CampusForum Sign Up Screen
 require_once __DIR__ . '/db.php';
 
 // If already logged in, go straight to index.php
-if (!empty($_SESSION['user_id'])) {
+if (is_logged_in()) {
     header("Location: index.php");
     exit;
 }
 
 $error = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+    $name = trim($_POST['name'] ?? '');
     $username = trim($_POST['username'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
     $confirm_password = $_POST['confirm_password'] ?? '';
 
     if (empty($username) || empty($email) || empty($password) || empty($confirm_password)) {
-        $error = 'Please fill in all fields.';
+        $error = 'Please fill in all required fields.';
     } elseif ($password !== $confirm_password) {
         $error = 'Passwords do not match.';
     } elseif (strlen($password) < 6) {
@@ -26,20 +27,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Please enter a valid email address.';
     } else {
         // Check if username or email exists
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ? OR email = ?");
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE LOWER(TRIM(username)) = LOWER(?) OR LOWER(TRIM(email)) = LOWER(?)");
         $stmt->execute([$username, $email]);
         if ($stmt->fetch()) {
             $error = 'Username or email is already taken.';
         } else {
             $hashed = password_hash($password, PASSWORD_BCRYPT);
-            $name = ucfirst($username);
+            $displayName = !empty($name) ? $name : ucfirst($username);
             $avatar = 'assets/images/avatar_default.svg';
 
             $insert = $pdo->prepare("INSERT INTO users (username, email, password, name, avatar, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
-            $insert->execute([$username, $email, $hashed, $name, $avatar]);
+            $insert->execute([$username, $email, $hashed, $displayName, $avatar]);
+            $new_id = (int)$pdo->lastInsertId();
 
-            // Redirect to login page to log in and remember user
-            header("Location: login.php?registered=1&username=" . urlencode($username));
+            // Auto-log in new user and redirect to feed
+            $_SESSION['user_id'] = $new_id;
+            set_remember_login($new_id);
+            header("Location: index.php");
             exit;
         }
     }
@@ -51,8 +55,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Create an Account | CampusForum</title>
-  <link rel="stylesheet" href="assets/css/auth.css">
+  <link rel="stylesheet" href="assets/css/auth.css?v=<?= time() ?>">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2338bdf8'><path d='M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z'/></svg>">
+  <style>
+    /* Direct inline autofill reset to override browser defaults immediately */
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover, 
+    input:-webkit-autofill:focus, 
+    input:-webkit-autofill:active {
+      -webkit-box-shadow: 0 0 0 1000px #091424 inset !important;
+      -webkit-text-fill-color: #f8fafc !important;
+      caret-color: #f8fafc !important;
+      border-radius: 12px !important;
+      border: 1px solid #1e2e47 !important;
+      transition: background-color 500000s ease-in-out 0s, color 500000s ease-in-out 0s !important;
+    }
+    [data-theme="light"] input:-webkit-autofill,
+    [data-theme="light"] input:-webkit-autofill:hover, 
+    [data-theme="light"] input:-webkit-autofill:focus, 
+    [data-theme="light"] input:-webkit-autofill:active {
+      -webkit-box-shadow: 0 0 0 1000px #f8fafc inset !important;
+      -webkit-text-fill-color: #0f172a !important;
+      caret-color: #0f172a !important;
+      border-radius: 12px !important;
+      border: 1px solid #cbd5e1 !important;
+      transition: background-color 500000s ease-in-out 0s, color 500000s ease-in-out 0s !important;
+    }
+  </style>
   <script>
     (function() {
       const savedTheme = localStorage.getItem('campus_theme') || 'dark';
@@ -67,11 +96,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <span id="auth-theme-text">Dark</span>
   </button>
 
-  <!-- Campus Night Background matching Image 2 -->
+  <!-- Campus Night Background matching Design -->
   <div class="auth-bg-layer"></div>
   <div class="auth-overlay-gradient"></div>
 
-  <div class="auth-wrapper">
+  <div class="auth-wrapper" style="margin: auto;">
     <!-- Brand Header -->
     <div class="auth-header-branding">
       <div class="auth-logo-bubbles">
@@ -100,13 +129,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <?php endif; ?>
 
       <form action="register.php" method="POST" class="auth-form" id="register-form">
+        <!-- Full Name input (optional) -->
+        <div class="auth-field-box">
+          <svg class="field-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+          <input type="text" name="name" class="auth-input" placeholder="Full Name (e.g. Aditya Biswas)" value="<?= isset($_POST['name']) ? e($_POST['name']) : '' ?>" autocomplete="name">
+        </div>
+
         <!-- Username input -->
         <div class="auth-field-box">
           <svg class="field-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
-            <circle cx="12" cy="7" r="4"></circle>
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"></path>
           </svg>
-          <input type="text" name="username" class="auth-input" placeholder="Enter your username" value="<?= isset($_POST['username']) ? e($_POST['username']) : '' ?>" required>
+          <input type="text" name="username" class="auth-input" placeholder="Choose a username (e.g. aditya)" value="<?= isset($_POST['username']) ? e($_POST['username']) : '' ?>" autocomplete="username" required>
         </div>
 
         <!-- Email input -->
@@ -115,7 +153,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <rect x="2" y="4" width="20" height="16" rx="2"></rect>
             <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
           </svg>
-          <input type="email" name="email" class="auth-input" placeholder="Enter your email" value="<?= isset($_POST['email']) ? e($_POST['email']) : '' ?>" required>
+          <input type="email" name="email" class="auth-input" placeholder="Email address (e.g. student@college.edu)" value="<?= isset($_POST['email']) ? e($_POST['email']) : '' ?>" autocomplete="email" required>
         </div>
 
         <!-- Password input -->
@@ -124,10 +162,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
             <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
           </svg>
-          <input type="password" name="password" id="reg-password" class="auth-input" placeholder="Enter your password" required>
-          <button type="button" class="btn-toggle-eye" onclick="togglePasswordVisibility('reg-password', this)">
+          <input type="password" name="password" id="reg-password" class="auth-input has-eye" placeholder="Password (minimum 6 characters)" autocomplete="new-password" required>
+          <button type="button" class="btn-toggle-eye" onclick="togglePasswordVisibility('reg-password', this)" aria-label="Toggle password visibility" title="Show password">
             <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path>
               <circle cx="12" cy="12" r="3"></circle>
             </svg>
           </button>
@@ -139,17 +177,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
             <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
           </svg>
-          <input type="password" name="confirm_password" id="reg-confirm-password" class="auth-input" placeholder="Confirm your password" required>
-          <button type="button" class="btn-toggle-eye" onclick="togglePasswordVisibility('reg-confirm-password', this)">
+          <input type="password" name="confirm_password" id="reg-confirm-password" class="auth-input has-eye" placeholder="Confirm your password" autocomplete="new-password" required>
+          <button type="button" class="btn-toggle-eye" onclick="togglePasswordVisibility('reg-confirm-password', this)" aria-label="Toggle password visibility" title="Show password">
             <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path>
               <circle cx="12" cy="12" r="3"></circle>
             </svg>
           </button>
         </div>
 
         <!-- Submit Button -->
-        <button type="submit" class="btn-auth-submit">Create Account</button>
+        <button type="submit" class="btn-auth-submit" id="btn-reg-submit">Create Account</button>
 
         <!-- Divider -->
         <div class="auth-divider">
@@ -158,7 +196,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <!-- Social Icons matching Image 2 -->
         <div class="auth-social-row">
-          <button type="button" class="btn-social" title="Google sign up" onclick="alert('Please sign up using your email and password above.');">
+          <button type="button" class="btn-social" title="Continue with Google" onclick="alert('Please sign up using your email and password above.');">
             <svg width="20" height="20" viewBox="0 0 24 24">
               <path fill="#EA4335" d="M12 5c1.56 0 2.98.54 4.09 1.58l3.07-3.07C17.3 1.77 14.84 1 12 1 7.42 1 3.53 3.61 1.71 7.39l3.66 2.84C6.25 7.37 8.88 5 12 5z"/>
               <path fill="#4285F4" d="M23.49 12.28c0-.79-.07-1.54-.19-2.28H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58l3.68 2.86c2.14-1.98 3.74-4.89 3.74-8.67z"/>
@@ -166,12 +204,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               <path fill="#34A853" d="M12 23.5c3.24 0 5.96-1.08 7.95-2.92l-3.68-2.86c-1.08.72-2.46 1.15-4.27 1.15-3.12 0-5.75-2.37-6.63-5.23L1.71 16.48C3.53 20.26 7.42 22.87 12 23.5z"/>
             </svg>
           </button>
-          <button type="button" class="btn-social" title="GitHub sign up" onclick="alert('Please sign up using your email and password above.');">
+          <button type="button" class="btn-social" title="Continue with GitHub" onclick="alert('Please sign up using your email and password above.');">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="#ffffff">
               <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
             </svg>
           </button>
-          <button type="button" class="btn-social" title="Microsoft sign up" onclick="alert('Please sign up using your email and password above.');">
+          <button type="button" class="btn-social" title="Continue with Microsoft" onclick="alert('Please sign up using your email and password above.');">
             <svg width="18" height="18" viewBox="0 0 24 24">
               <path fill="#F25022" d="M1 1h10v10H1z"/>
               <path fill="#7FBA00" d="M13 1h10v10H13z"/>
@@ -214,14 +252,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     function togglePasswordVisibility(inputId, btn) {
       const input = document.getElementById(inputId);
+      if (!input) return;
       if (input.type === 'password') {
         input.type = 'text';
         btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
+        btn.setAttribute('aria-label', 'Hide password');
+        btn.setAttribute('title', 'Hide password');
       } else {
         input.type = 'password';
-        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+        btn.setAttribute('aria-label', 'Show password');
+        btn.setAttribute('title', 'Show password');
       }
     }
+
+    // Submit animation feedback
+    document.getElementById('register-form').addEventListener('submit', function() {
+      const btn = document.getElementById('btn-reg-submit');
+      if (btn) {
+        btn.textContent = 'Creating account...';
+        btn.style.opacity = '0.85';
+      }
+    });
   </script>
 </body>
 </html>
