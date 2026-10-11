@@ -1,9 +1,11 @@
 # Database configuration (contains sensitive credentials)
 db.php
 
-# User uploaded attachments
+# User uploads & media
+/assets/uploads/
+assets/uploads/
 assets/uploads/*
-!assets/uploads/.gitkeep
+uploads/
 
 # Environment & temporary files
 .env
