@@ -65,5 +65,4 @@ FORUM-OR-DISCUSSION-BOARD/
    Navigate to:
    ```text
    http://localhost/FORUM-OR-DISCUSSION-BOARD/index.php
-   ```
-   The database `campus_forum` will automatically connect or create tables on first run via `db.php`.
+
