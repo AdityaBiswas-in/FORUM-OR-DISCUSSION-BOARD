@@ -8,9 +8,8 @@ require_once __DIR__ . '/db.php';
 // ========================================================
 $currentUser = null;
 if (!empty($_SESSION['user_id'])) {
-    $stmt = $pdo->prepare("SELECT id, username, email, name, avatar, role, bio FROM users WHERE id = ?");
-    $stmt->execute([$_SESSION['user_id']]);
-    $currentUser = $stmt->fetch();
+    $result = $conn->execute_query("SELECT id, username, email, name, avatar, role, bio FROM users WHERE id = ?", [$_SESSION['user_id']]);
+    $currentUser = $result->fetch_assoc();
 }
 
 if (!$currentUser) {
@@ -55,22 +54,21 @@ function time_ago(?string $datetime): string {
  *
  * @param array|null $files
  * @param int $post_id
- * @param PDO $pdo
+ * @param mysqli $conn
  * @return void
  */
-function upload_post_images(?array $files, int $post_id, PDO $pdo): void {
+function upload_post_images(?array $files, int $post_id, mysqli $conn): void {
     if (empty($files) || empty($files['name'][0])) return;
     $dir = __DIR__ . '/assets/uploads/';
     if (!is_dir($dir)) mkdir($dir, 0777, true);
     $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-    $stmt = $pdo->prepare("INSERT INTO post_images (post_id, image_url) VALUES (?, ?)");
     for ($i = 0; $i < min(count($files['name']), 4); $i++) {
         if ($files['error'][$i] === UPLOAD_ERR_OK) {
             $ext = strtolower(pathinfo($files['name'][$i], PATHINFO_EXTENSION));
             if (in_array($ext, $allowed)) {
                 $name = 'post_' . $post_id . '_' . time() . '_' . $i . '.' . $ext;
                 if (move_uploaded_file($files['tmp_name'][$i], $dir . $name)) {
-                    $stmt->execute([$post_id, 'assets/uploads/' . $name]);
+                    $conn->execute_query("INSERT INTO post_images (post_id, image_url) VALUES (?, ?)", [$post_id, 'assets/uploads/' . $name]);
                 }
             }
         }
@@ -235,10 +233,9 @@ if ($action === 'create_post' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $title = trim($_POST['title'] ?? '');
     $content = trim($_POST['content'] ?? '');
     if (!empty($title) && !empty($content)) {
-        $stmt = $pdo->prepare("INSERT INTO posts (user_id, title, content, created_at) VALUES (?, ?, ?, NOW())");
-        $stmt->execute([$currentUser['id'], $title, $content]);
-        $post_id = $pdo->lastInsertId();
-        upload_post_images($_FILES['images'] ?? null, $post_id, $pdo);
+        $conn->execute_query("INSERT INTO posts (user_id, title, content, created_at) VALUES (?, ?, ?, NOW())", [$currentUser['id'], $title, $content]);
+        $post_id = (int)$conn->insert_id;
+        upload_post_images($_FILES['images'] ?? null, $post_id, $conn);
         header("Location: index.php?msg=created#post-" . $post_id);
         exit;
     }
@@ -253,33 +250,30 @@ if ($action === 'edit_post' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $content = trim($_POST['content'] ?? '');
     $delete_image_ids = $_POST['delete_image_ids'] ?? [];
 
-    $stmt = $pdo->prepare("SELECT user_id FROM posts WHERE id = ?");
-    $stmt->execute([$post_id]);
-    $p = $stmt->fetch();
+    $result = $conn->execute_query("SELECT user_id FROM posts WHERE id = ?", [$post_id]);
+    $p = $result->fetch_assoc();
 
     if ($p && (int)$p['user_id'] === (int)$currentUser['id'] && !empty($title) && !empty($content)) {
-        $stmt = $pdo->prepare("UPDATE posts SET title = ?, content = ?, updated_at = NOW() WHERE id = ?");
-        $stmt->execute([$title, $content, $post_id]);
+        $conn->execute_query("UPDATE posts SET title = ?, content = ?, updated_at = NOW() WHERE id = ?", [$title, $content, $post_id]);
 
         // Delete any existing images requested for removal
         if (!empty($delete_image_ids) && is_array($delete_image_ids)) {
             foreach ($delete_image_ids as $del_id) {
                 $del_id = (int)$del_id;
                 if ($del_id > 0) {
-                    $imgStmt = $pdo->prepare("SELECT image_url FROM post_images WHERE id = ? AND post_id = ?");
-                    $imgStmt->execute([$del_id, $post_id]);
-                    $imgUrl = $imgStmt->fetchColumn();
-                    if ($imgUrl) {
-                        $f = __DIR__ . '/' . $imgUrl;
+                    $imgResult = $conn->execute_query("SELECT image_url FROM post_images WHERE id = ? AND post_id = ?", [$del_id, $post_id]);
+                    $imgRow = $imgResult->fetch_assoc();
+                    if ($imgRow && !empty($imgRow['image_url'])) {
+                        $f = __DIR__ . '/' . $imgRow['image_url'];
                         if (file_exists($f)) @unlink($f);
-                        $pdo->prepare("DELETE FROM post_images WHERE id = ? AND post_id = ?")->execute([$del_id, $post_id]);
+                        $conn->execute_query("DELETE FROM post_images WHERE id = ? AND post_id = ?", [$del_id, $post_id]);
                     }
                 }
             }
         }
 
         // Upload any newly selected images
-        upload_post_images($_FILES['images'] ?? null, $post_id, $pdo);
+        upload_post_images($_FILES['images'] ?? null, $post_id, $conn);
     }
     header("Location: index.php?post=" . $post_id . "#post-" . $post_id);
     exit;
@@ -288,18 +282,16 @@ if ($action === 'edit_post' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 // 3.3 DELETE POST
 if ($action === 'delete_post') {
     $post_id = (int)($_REQUEST['id'] ?? $_POST['post_id'] ?? 0);
-    $stmt = $pdo->prepare("SELECT user_id FROM posts WHERE id = ?");
-    $stmt->execute([$post_id]);
-    $p = $stmt->fetch();
+    $result = $conn->execute_query("SELECT user_id FROM posts WHERE id = ?", [$post_id]);
+    $p = $result->fetch_assoc();
 
     if ($p && (int)$p['user_id'] === (int)$currentUser['id']) {
-        $imgStmt = $pdo->prepare("SELECT image_url FROM post_images WHERE post_id = ?");
-        $imgStmt->execute([$post_id]);
-        foreach ($imgStmt->fetchAll(PDO::FETCH_COLUMN) as $img) {
-            $f = __DIR__ . '/' . $img;
+        $imgResult = $conn->execute_query("SELECT image_url FROM post_images WHERE post_id = ?", [$post_id]);
+        while ($imgRow = $imgResult->fetch_assoc()) {
+            $f = __DIR__ . '/' . $imgRow['image_url'];
             if (file_exists($f)) @unlink($f);
         }
-        $pdo->prepare("DELETE FROM posts WHERE id = ?")->execute([$post_id]);
+        $conn->execute_query("DELETE FROM posts WHERE id = ?", [$post_id]);
     }
     header("Location: index.php?msg=deleted");
     exit;
@@ -313,9 +305,11 @@ if ($action === 'create_reply' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $image_url = upload_single_image($_FILES['reply_image'] ?? null);
 
     if (!empty($content) || !empty($image_url)) {
-        $stmt = $pdo->prepare("INSERT INTO replies (post_id, user_id, parent_id, content, image_url, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
-        $stmt->execute([$post_id, $currentUser['id'], $parent_id, $content, $image_url]);
-        $reply_id = $pdo->lastInsertId();
+        $conn->execute_query(
+            "INSERT INTO replies (post_id, user_id, parent_id, content, image_url, created_at) VALUES (?, ?, ?, ?, ?, NOW())",
+            [$post_id, $currentUser['id'], $parent_id, $content, $image_url]
+        );
+        $reply_id = (int)$conn->insert_id;
         header("Location: index.php?post=" . $post_id . "#reply-" . $reply_id);
         exit;
     }
@@ -328,13 +322,11 @@ if ($action === 'edit_reply' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $reply_id = (int)($_POST['reply_id'] ?? 0);
     $content = trim($_POST['content'] ?? '');
 
-    $stmt = $pdo->prepare("SELECT user_id, post_id FROM replies WHERE id = ?");
-    $stmt->execute([$reply_id]);
-    $r = $stmt->fetch();
+    $result = $conn->execute_query("SELECT user_id, post_id FROM replies WHERE id = ?", [$reply_id]);
+    $r = $result->fetch_assoc();
 
     if ($r && (int)$r['user_id'] === (int)$currentUser['id'] && !empty($content)) {
-        $stmt = $pdo->prepare("UPDATE replies SET content = ?, updated_at = NOW() WHERE id = ?");
-        $stmt->execute([$content, $reply_id]);
+        $conn->execute_query("UPDATE replies SET content = ?, updated_at = NOW() WHERE id = ?", [$content, $reply_id]);
         header("Location: index.php?post=" . (int)$r['post_id'] . "#reply-" . $reply_id);
         exit;
     }
@@ -345,15 +337,14 @@ if ($action === 'edit_reply' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 // 3.6 DELETE REPLY
 if ($action === 'delete_reply') {
     $reply_id = (int)($_REQUEST['id'] ?? $_POST['reply_id'] ?? 0);
-    $stmt = $pdo->prepare("SELECT user_id, post_id, image_url FROM replies WHERE id = ?");
-    $stmt->execute([$reply_id]);
-    $r = $stmt->fetch();
+    $result = $conn->execute_query("SELECT user_id, post_id, image_url FROM replies WHERE id = ?", [$reply_id]);
+    $r = $result->fetch_assoc();
 
     if ($r && (int)$r['user_id'] === (int)$currentUser['id']) {
         if (!empty($r['image_url']) && file_exists(__DIR__ . '/' . $r['image_url'])) {
             @unlink(__DIR__ . '/' . $r['image_url']);
         }
-        $pdo->prepare("DELETE FROM replies WHERE id = ?")->execute([$reply_id]);
+        $conn->execute_query("DELETE FROM replies WHERE id = ?", [$reply_id]);
         header("Location: index.php?post=" . (int)$r['post_id']);
         exit;
     }
@@ -366,19 +357,18 @@ if ($action === 'toggle_like') {
     $post_id = (int)($_REQUEST['post_id'] ?? 0);
     $is_ajax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) || (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false);
 
-    $stmt = $pdo->prepare("SELECT id FROM likes WHERE user_id = ? AND post_id = ? AND reply_id IS NULL");
-    $stmt->execute([$currentUser['id'], $post_id]);
-    $existing = $stmt->fetch();
+    $result = $conn->execute_query("SELECT id FROM likes WHERE user_id = ? AND post_id = ? AND reply_id IS NULL", [$currentUser['id'], $post_id]);
+    $existing = $result->fetch_assoc();
 
     if ($existing) {
-        $pdo->prepare("DELETE FROM likes WHERE id = ?")->execute([$existing['id']]);
+        $conn->execute_query("DELETE FROM likes WHERE id = ?", [$existing['id']]);
         $liked = false;
     } else {
-        $pdo->prepare("INSERT INTO likes (user_id, post_id, created_at) VALUES (?, ?, NOW())")->execute([$currentUser['id'], $post_id]);
+        $conn->execute_query("INSERT INTO likes (user_id, post_id, created_at) VALUES (?, ?, NOW())", [$currentUser['id'], $post_id]);
         $liked = true;
     }
 
-    $count = (int)$pdo->query("SELECT COUNT(*) FROM likes WHERE post_id = {$post_id} AND reply_id IS NULL")->fetchColumn();
+    $count = (int)($conn->query("SELECT COUNT(*) FROM likes WHERE post_id = {$post_id} AND reply_id IS NULL")->fetch_row()[0] ?? 0);
 
     if ($is_ajax) {
         header('Content-Type: application/json');
@@ -422,9 +412,8 @@ if (!empty($where)) {
 }
 $sql .= " ORDER BY p.created_at DESC";
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$posts = $stmt->fetchAll();
+$postsResult = $conn->execute_query($sql, $params);
+$posts = $postsResult->fetch_all(MYSQLI_ASSOC);
 
 // Fetch all images for these posts
 $postImages = [];
@@ -432,9 +421,8 @@ $postImagesData = [];
 $post_ids = array_column($posts, 'id');
 if (!empty($post_ids)) {
     $in = implode(',', array_fill(0, count($post_ids), '?'));
-    $imgStmt = $pdo->prepare("SELECT id, post_id, image_url FROM post_images WHERE post_id IN ($in) ORDER BY id ASC");
-    $imgStmt->execute($post_ids);
-    while ($row = $imgStmt->fetch()) {
+    $imgResult = $conn->execute_query("SELECT id, post_id, image_url FROM post_images WHERE post_id IN ($in) ORDER BY id ASC", $post_ids);
+    while ($row = $imgResult->fetch_assoc()) {
         $postImages[$row['post_id']][] = $row['image_url'];
         $postImagesData[$row['post_id']][] = [
             'id' => (int)$row['id'],
@@ -447,27 +435,26 @@ if (!empty($post_ids)) {
 $repliesByPost = [];
 if (!empty($post_ids)) {
     $in = implode(',', array_fill(0, count($post_ids), '?'));
-    $repStmt = $pdo->prepare("
+    $repResult = $conn->execute_query("
         SELECT r.*, u.name as author_name, u.username as author_username, u.avatar as author_avatar
         FROM replies r
         JOIN users u ON r.user_id = u.id
         WHERE r.post_id IN ($in)
         ORDER BY r.created_at ASC
-    ");
-    $repStmt->execute($post_ids);
-    while ($r = $repStmt->fetch()) {
+    ", $post_ids);
+    while ($r = $repResult->fetch_assoc()) {
         $repliesByPost[$r['post_id']][] = $r;
     }
 }
 
 // Recent Discussions for right sidebar
-$recentDiscussions = $pdo->query("
+$recentDiscussions = $conn->query("
     SELECT p.id, p.title, p.created_at, u.name, u.avatar,
            (SELECT COUNT(*) FROM replies r WHERE r.post_id = p.id) as reply_count
     FROM posts p
     JOIN users u ON p.user_id = u.id
     ORDER BY p.created_at DESC LIMIT 5
-")->fetchAll();
+")->fetch_all(MYSQLI_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="en">

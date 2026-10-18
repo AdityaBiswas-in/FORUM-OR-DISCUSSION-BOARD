@@ -31,9 +31,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $error = 'Please enter your registered email or username to log in.';
         } else {
             // Prototype bypass: find user by email, username, or name and log in directly
-            $stmt = $pdo->prepare("SELECT * FROM users WHERE LOWER(TRIM(email)) = LOWER(?) OR LOWER(TRIM(username)) = LOWER(?) OR LOWER(TRIM(name)) = LOWER(?) LIMIT 1");
-            $stmt->execute([$bypass_email, $bypass_email, $bypass_email]);
-            $user = $stmt->fetch();
+            $result = $conn->execute_query(
+                "SELECT * FROM users WHERE LOWER(TRIM(email)) = LOWER(?) OR LOWER(TRIM(username)) = LOWER(?) OR LOWER(TRIM(name)) = LOWER(?) LIMIT 1",
+                [$bypass_email, $bypass_email, $bypass_email]
+            );
+            $user = $result->fetch_assoc();
 
             if ($user) {
                 $_SESSION['user_id'] = (int)$user['id'];
@@ -51,9 +53,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $error = 'Please fill in all fields.';
         } else {
             // Support login by username, email, or full name
-            $stmt = $pdo->prepare("SELECT * FROM users WHERE LOWER(TRIM(username)) = LOWER(?) OR LOWER(TRIM(email)) = LOWER(?) OR LOWER(TRIM(name)) = LOWER(?) LIMIT 1");
-            $stmt->execute([$login_input, $login_input, $login_input]);
-            $user = $stmt->fetch();
+            $result = $conn->execute_query(
+                "SELECT * FROM users WHERE LOWER(TRIM(username)) = LOWER(?) OR LOWER(TRIM(email)) = LOWER(?) OR LOWER(TRIM(name)) = LOWER(?) LIMIT 1",
+                [$login_input, $login_input, $login_input]
+            );
+            $user = $result->fetch_assoc();
 
             $passwordMatches = false;
             if ($user) {

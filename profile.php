@@ -7,9 +7,8 @@ require_once __DIR__ . '/db.php';
 // ========================================================
 $currentUser = null;
 if (!empty($_SESSION['user_id'])) {
-    $stmt = $pdo->prepare("SELECT id, username, email, name, avatar, role, bio, banner_url, created_at FROM users WHERE id = ?");
-    $stmt->execute([$_SESSION['user_id']]);
-    $currentUser = $stmt->fetch();
+    $result = $conn->execute_query("SELECT id, username, email, name, avatar, role, bio, banner_url, created_at FROM users WHERE id = ?", [$_SESSION['user_id']]);
+    $currentUser = $result->fetch_assoc();
 }
 
 if (!$currentUser) {
@@ -45,13 +44,11 @@ $targetId = (int)($_GET['id'] ?? 0);
 $targetUsername = trim($_GET['u'] ?? '');
 
 if ($targetId > 0) {
-    $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
-    $stmt->execute([$targetId]);
-    $profileUser = $stmt->fetch();
+    $result = $conn->execute_query("SELECT * FROM users WHERE id = ?", [$targetId]);
+    $profileUser = $result->fetch_assoc();
 } elseif (!empty($targetUsername)) {
-    $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ?");
-    $stmt->execute([$targetUsername]);
-    $profileUser = $stmt->fetch();
+    $result = $conn->execute_query("SELECT * FROM users WHERE username = ?", [$targetUsername]);
+    $profileUser = $result->fetch_assoc();
 } else {
     $profileUser = $currentUser;
 }
@@ -69,7 +66,7 @@ $profileId = (int)$profileUser['id'];
 $errorMsg = '';
 $successMsg = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_profile') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'update_profile') {
     if (!$isOwnProfile) {
         header("Location: profile.php?id=" . $profileId);
         exit;
@@ -122,8 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'updat
         $updateSql .= " WHERE id = ?";
         $params[] = $profileId;
 
-        $stmt = $pdo->prepare($updateSql);
-        $stmt->execute($params);
+        $conn->execute_query($updateSql, $params);
 
         header("Location: profile.php?id=" . $profileId . "&updated=1");
         exit;
@@ -135,9 +131,8 @@ if (!empty($_GET['updated'])) {
 }
 
 // Refresh profile user data
-$stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
-$stmt->execute([$profileId]);
-$profileUser = $stmt->fetch() ?: $profileUser;
+$result = $conn->execute_query("SELECT * FROM users WHERE id = ?", [$profileId]);
+$profileUser = $result->fetch_assoc() ?: $profileUser;
 if ($isOwnProfile) {
     $currentUser = $profileUser;
 }
@@ -145,8 +140,8 @@ if ($isOwnProfile) {
 // ========================================================
 // 4. COUNTS & TAB DATA FETCHING
 // ========================================================
-$postCount = (int)$pdo->query("SELECT COUNT(*) FROM posts WHERE user_id = {$profileId}")->fetchColumn();
-$replyCount = (int)$pdo->query("SELECT COUNT(*) FROM replies WHERE user_id = {$profileId}")->fetchColumn();
+$postCount = (int)($conn->query("SELECT COUNT(*) FROM posts WHERE user_id = {$profileId}")->fetch_row()[0] ?? 0);
+$replyCount = (int)($conn->query("SELECT COUNT(*) FROM replies WHERE user_id = {$profileId}")->fetch_row()[0] ?? 0);
 
 $tab = $_GET['tab'] ?? 'posts';
 if (!in_array($tab, ['posts', 'replies'])) {
@@ -159,7 +154,7 @@ $userReplies = [];
 $commentsOnPosts = [];
 
 if ($tab === 'posts') {
-    $stmt = $pdo->prepare("
+    $result = $conn->execute_query("
         SELECT p.*, u.name as author_name, u.username as author_username, u.avatar as author_avatar,
                (SELECT COUNT(*) FROM replies r WHERE r.post_id = p.id) as reply_count,
                (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id AND l.reply_id IS NULL) as like_count
@@ -167,21 +162,19 @@ if ($tab === 'posts') {
         JOIN users u ON p.user_id = u.id
         WHERE p.user_id = ?
         ORDER BY p.created_at DESC
-    ");
-    $stmt->execute([$profileId]);
-    $userPosts = $stmt->fetchAll();
+    ", [$profileId]);
+    $userPosts = $result->fetch_all(MYSQLI_ASSOC);
 
     $p_ids = array_column($userPosts, 'id');
     if (!empty($p_ids)) {
         $in = implode(',', array_fill(0, count($p_ids), '?'));
-        $imgStmt = $pdo->prepare("SELECT post_id, image_url FROM post_images WHERE post_id IN ($in) ORDER BY id ASC");
-        $imgStmt->execute($p_ids);
-        while ($row = $imgStmt->fetch()) {
+        $imgResult = $conn->execute_query("SELECT post_id, image_url FROM post_images WHERE post_id IN ($in) ORDER BY id ASC", $p_ids);
+        while ($row = $imgResult->fetch_assoc()) {
             $postImages[$row['post_id']][] = $row['image_url'];
         }
     }
 } elseif ($tab === 'replies') {
-    $stmt = $pdo->prepare("
+    $result = $conn->execute_query("
         SELECT r.*, 
                p.title as post_title, p.id as post_id, p.content as post_content, p.created_at as post_created_at,
                pu.id as post_author_id, pu.name as post_author_name, pu.username as post_author_username, pu.avatar as post_author_avatar,
@@ -192,20 +185,19 @@ if ($tab === 'posts') {
         JOIN users u ON r.user_id = u.id
         WHERE r.user_id = ?
         ORDER BY r.created_at DESC
-    ");
-    $stmt->execute([$profileId]);
-    $userReplies = $stmt->fetchAll();
+    ", [$profileId]);
+    $userReplies = $result->fetch_all(MYSQLI_ASSOC);
 }
 
 // Fetch Recent Discussions for right sidebar
-$recentDiscussions = $pdo->query("
+$recentDiscussions = $conn->query("
     SELECT p.id, p.title, p.created_at, u.name, u.avatar,
            (SELECT COUNT(*) FROM replies r WHERE r.post_id = p.id) as reply_count
     FROM posts p
     JOIN users u ON p.user_id = u.id
     ORDER BY p.created_at DESC
     LIMIT 5
-")->fetchAll();
+")->fetch_all(MYSQLI_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">

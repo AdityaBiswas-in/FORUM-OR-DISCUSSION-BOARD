@@ -27,17 +27,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $error = 'Please enter a valid email address.';
     } else {
         // Check if username or email exists
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE LOWER(TRIM(username)) = LOWER(?) OR LOWER(TRIM(email)) = LOWER(?)");
-        $stmt->execute([$username, $email]);
-        if ($stmt->fetch()) {
+        $result = $conn->execute_query(
+            "SELECT id FROM users WHERE LOWER(TRIM(username)) = LOWER(?) OR LOWER(TRIM(email)) = LOWER(?)",
+            [$username, $email]
+        );
+        if ($result->fetch_assoc()) {
             $error = 'Username or email is already taken.';
         } else {
             $displayName = !empty($name) ? $name : ucfirst($username);
             $avatar = 'assets/images/avatar_default.svg';
 
-            $insert = $pdo->prepare("INSERT INTO users (username, email, password, name, avatar, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
-            $insert->execute([$username, $email, $password, $displayName, $avatar]);
-            $new_id = (int)$pdo->lastInsertId();
+            $conn->execute_query(
+                "INSERT INTO users (username, email, password, name, avatar, created_at) VALUES (?, ?, ?, ?, ?, NOW())",
+                [$username, $email, $password, $displayName, $avatar]
+            );
+            $new_id = (int)$conn->insert_id;
 
             // Auto-log in new user and redirect to feed
             $_SESSION['user_id'] = $new_id;
