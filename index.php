@@ -1,6 +1,5 @@
 <?php
 
-// Handles: Posting, Feed, Editing Posts, Deleting Posts, Replying, Editing Replies, Deleting Replies, and Bookmarks/Likes.
 require_once __DIR__ . '/db.php';
 
 // ========================================================
