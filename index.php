@@ -1,5 +1,5 @@
 <?php
-// index.php - All-in-One CampusForum Discussion Board
+
 // Handles: Posting, Feed, Editing Posts, Deleting Posts, Replying, Editing Replies, Deleting Replies, and Bookmarks/Likes.
 require_once __DIR__ . '/db.php';
 
@@ -456,6 +456,14 @@ $recentDiscussions = $conn->query("
     ORDER BY p.created_at DESC LIMIT 5
 ")->fetch_all(MYSQLI_ASSOC);
 ?>
+
+
+
+
+
+
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>

@@ -1,6 +1,4 @@
 <?php
-// db.example.php - Template for database connection & session setup
-// Rename or copy this file to 'db.php' and enter your database credentials.
 
 // 1. Start session
 if (session_status() === PHP_SESSION_NONE) {

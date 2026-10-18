@@ -199,6 +199,27 @@ $recentDiscussions = $conn->query("
     LIMIT 5
 ")->fetch_all(MYSQLI_ASSOC);
 ?>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- ========================================
+HTML PART
+======================================== -->
+
+
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
