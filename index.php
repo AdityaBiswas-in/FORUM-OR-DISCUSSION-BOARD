@@ -461,8 +461,9 @@ $recentDiscussions = $conn->query("
 
 
 
-
-
+<!-- ========================================
+HTML PART
+======================================== -->
 
 <!DOCTYPE html>
 <html lang="en">
