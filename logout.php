@@ -2,14 +2,11 @@
 // logout.php - Sign out current user
 require_once __DIR__ . '/db.php';
 
-$_SESSION = [];
-if (ini_get("session.use_cookies")) {
-    $params = session_get_cookie_params();
-    setcookie(session_name(), '', time() - 42000, $params["path"], $params["domain"], $params["secure"], $params["httponly"]);
-}
-if (session_status() === PHP_SESSION_ACTIVE) {
-    session_destroy();
-}
+// Clear and destroy session
+session_unset();
+session_destroy();
+
+// Delete remember-me cookie if set
 setcookie('campus_remember', '', time() - 3600, '/');
 
 header("Location: login.php?logged_out=1");
