@@ -229,3 +229,4 @@ To run Quaddit locally on your machine:
 ## 🎓 Conclusion
 
 Building Quaddit provided practical experience in bridging theoretical knowledge of web development into a working real-world application. Through this project, we strengthened our understanding of core PHP server-side programming, relational data modeling in MySQL, session-based security, and building clean, responsive user interfaces.
+
