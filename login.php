@@ -63,7 +63,8 @@ HTML PART
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login | Quaddit</title>
-  <link rel="icon" type="image/jpeg" href="assets/images/logo.jpg">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/images/logo-transparent.png?v=7">
+  <link rel="shortcut icon" href="assets/images/favicon.ico?v=7">
   <link rel="stylesheet" href="assets/css/auth.css?v=<?= time() ?>">
   <style>
     /* Direct inline autofill reset to override browser defaults immediately */
@@ -112,7 +113,8 @@ HTML PART
     <!-- Brand Header -->
     <div class="auth-header-branding">
       <div class="auth-logo-bubbles">
-        <img src="assets/images/logo.jpg" alt="Quaddit Logo" style="width: 100%; height: 100%; border-radius: 12px; object-fit: cover;">
+        <img src="assets/images/logo-dark-theme.png?v=9" alt="Quaddit Logo" class="logo-for-dark">
+        <img src="assets/images/logo-light-theme.png?v=9" alt="Quaddit Logo" class="logo-for-light">
       </div>
       <h1 class="auth-brand-title">Quad<span>dit</span></h1>
       <p class="auth-tagline">Share ideas. Ask questions. Grow together.</p>

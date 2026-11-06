@@ -157,7 +157,8 @@ HTML PART
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= e($profileUser['name']) ?> (@<?= e($profileUser['username']) ?>) - Quaddit</title>
-  <link rel="icon" type="image/jpeg" href="assets/images/logo.jpg">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/images/logo-transparent.png?v=7">
+  <link rel="shortcut icon" href="assets/images/favicon.ico?v=7">
   <link rel="stylesheet" href="assets/css/style.css?v=<?= filemtime(__DIR__ . '/assets/css/style.css') ?>">
   <script>
     (function() {
@@ -179,7 +180,8 @@ HTML PART
       <!-- Brand Logo -->
       <a href="index.php" class="brand-header">
         <div class="brand-logo-icon">
-          <img src="assets/images/logo.jpg" alt="Quaddit Logo" class="brand-logo-img">
+          <img src="assets/images/logo-dark-theme.png?v=9" alt="Quaddit Logo" class="brand-logo-img logo-for-dark">
+          <img src="assets/images/logo-light-theme.png?v=9" alt="Quaddit Logo" class="brand-logo-img logo-for-light">
         </div>
         <div class="brand-text">Quad<span>dit</span></div>
       </a>

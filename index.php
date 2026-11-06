@@ -365,7 +365,8 @@ HTML PART starts here
   <title>Quaddit - College Discussion Board</title>
   <meta name="description" content="Quaddit is the modern discussion board for college students to share questions, images, setups, and campus moments.">
   <link rel="stylesheet" href="assets/css/style.css?v=<?= file_exists(__DIR__ . '/assets/css/style.css') ? filemtime(__DIR__ . '/assets/css/style.css') : time() ?>">
-  <link rel="icon" type="image/jpeg" href="assets/images/logo.jpg">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/images/logo-transparent.png?v=7">
+  <link rel="shortcut icon" href="assets/images/favicon.ico?v=7">
   <script>
     (function() {
       const savedTheme = localStorage.getItem('campus_theme') || 'dark';
@@ -385,7 +386,8 @@ HTML PART starts here
       <!-- Brand Logo -->
       <a href="index.php" class="brand-header">
         <div class="brand-logo-icon">
-          <img src="assets/images/logo.jpg" alt="Quaddit Logo" class="brand-logo-img">
+          <img src="assets/images/logo-dark-theme.png?v=9" alt="Quaddit Logo" class="brand-logo-img logo-for-dark">
+          <img src="assets/images/logo-light-theme.png?v=9" alt="Quaddit Logo" class="brand-logo-img logo-for-light">
         </div>
         <div class="brand-text">Quad<span>dit</span></div>
       </a>

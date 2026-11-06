@@ -19,7 +19,8 @@ $mobileSearchVal = trim($_GET['q'] ?? '');
   
   <a href="index.php" class="mobile-top-center-brand" aria-label="Quaddit Home">
     <div class="mobile-logo-wrap">
-      <img src="assets/images/logo.jpg" alt="Quaddit Logo" class="mobile-logo-img">
+      <img src="assets/images/logo-dark-theme.png?v=9" alt="Quaddit Logo" class="mobile-logo-img logo-for-dark">
+      <img src="assets/images/logo-light-theme.png?v=9" alt="Quaddit Logo" class="mobile-logo-img logo-for-light">
     </div>
     <span class="mobile-logo-text">Quad<span>dit</span></span>
   </a>
