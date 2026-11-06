@@ -2072,4 +2072,9 @@ textarea.form-control {
     display: flex;
     align-items: flex-start;
   }
+   /* 22. Alerts and notifications */
+   .alert {
+    display: flex;
+    align-items: flex-start;
+  }
   
