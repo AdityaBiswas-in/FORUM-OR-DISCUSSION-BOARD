@@ -39,15 +39,14 @@ function upload_post_images(?array $files, int $postId, mysqli $conn): void {
 }
 
 function upload_single_image(?array $file): ?string {
-  if (empty($file) || ($file['error'] ?? 1) !== UPLOAD_ERR_OK) return null;
-  $dir = __DIR__ . '/assets/uploads/';
-  if (!is_dir($dir)) mkdir($dir, 0777, true);
-  $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-  if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
-      $name = 'reply_' . time() . '_' . rand(100, 999) . ".$ext";
-      if (move_uploaded_file($file['tmp_name'], $dir . $name)) return "assets/uploads/$name";
-  }
-  return null;
+    if (empty($file) || ($file['error'] ?? 1) !== UPLOAD_ERR_OK) return null;
+    $tmp = $file['tmp_name'];
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
+        $mime = mime_content_type($tmp) ?: "image/$ext";
+        return 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($tmp));
+    }
+    return null;
 }
 
 // Recursively render a reply and its child replies
@@ -259,7 +258,9 @@ if ($action === 'delete_reply') {
     $replyId = (int)($_REQUEST['id'] ?? 0);
     $reply = $conn->execute_query("SELECT post_id, image_url FROM replies WHERE id = ? AND user_id = ?", [$replyId, $currentUser['id']])->fetch_assoc();
     if ($reply) {
-        if (!empty($reply['image_url'])) @unlink(__DIR__ . '/' . $reply['image_url']);
+        if (!empty($reply['image_url']) && str_starts_with($reply['image_url'], 'assets/')) {
+            @unlink(__DIR__ . '/' . $reply['image_url']);
+        }
         $conn->execute_query("DELETE FROM replies WHERE id = ?", [$replyId]);
         header("Location: index.php?post={$reply['post_id']}");
         exit;
