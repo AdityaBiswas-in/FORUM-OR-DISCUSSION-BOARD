@@ -88,97 +88,100 @@ flowchart TD
 
 ---
 
-## 🗄️ Database Design
+## 🗄️ Database Design & Schema Architecture
 
-The relational database (`Quaddit`) is designed with interconnected tables using primary (`PK`) and foreign keys (`FK`):
+The relational database (`quaddit`) is designed with 3 dedicated authentication tables alongside academic groups and discussion boards:
 
 ```
- ┌──────────────────────┐         1:N         ┌──────────────────────┐
- │        users         │────────────────────<│        posts         │
- ├──────────────────────┤                     ├──────────────────────┤
- │ PK  id               │                     │ PK  id               │
- │     username         │                     │ FK  user_id          │
- │     email            │                     │     title            │
- │     password (hash)  │                     │     content          │
- │     name             │                     │     created_at       │
- │     avatar           │                     │     updated_at       │
- │     banner_url       │                     └──────────┬───────────┘
- │     role             │                                │
- │     bio              │                                │ 1:N
- │     created_at       │                                ▼
- └──────────┬───────────┘                     ┌──────────────────────┐
-            │                                 │     post_images      │
-            │                                 ├──────────────────────┤
-            │                                 │ PK  id               │
-            │                                 │ FK  post_id          │
-            │                                 │     image_url / data │
-            │                                 │     created_at       │
-            │                                 └──────────────────────┘
-            │
-            │ 1:N                             ┌──────────────────────┐
-            ├────────────────────────────────<│       replies        │
-            │                                 ├──────────────────────┤
-            │                                 │ PK  id               │
-            │                                 │ FK  post_id          │
-            │                                 │ FK  user_id          │
-            │                                 │ FK  parent_id (self) │
-            │                                 │     content          │
-            │                                 │     created_at       │
-            │                                 └──────────────────────┘
-            │
-            │ 1:N                             ┌──────────────────────┐
-            └────────────────────────────────<│        likes         │
-                                              ├──────────────────────┤
-                                              │ PK  id               │
-                                              │ FK  user_id          │
-                                              │ FK  post_id          │
-                                              │     created_at       │
-                                              └──────────────────────┘
+ ┌──────────────────────┐         ┌──────────────────────┐         ┌──────────────────────┐
+ │       students       │         │       faculty        │         │        admins        │
+ ├──────────────────────┤         ├──────────────────────┤         ├──────────────────────┤
+ │ PK  id (10-digit)    │         │ PK  id (10-digit)    │         │ PK  id (10-digit)    │
+ │     name             │         │     name             │         │     name             │
+ │     email (unique)   │         │     email (unique)   │         │     email (unique)   │
+ │     password (hash)  │         │     password (hash)  │         │     password (hash)  │
+ │     avatar, bio      │         │     avatar, bio      │         │     avatar, bio      │
+ │     created_at       │         │     created_at       │         │     created_at       │
+ └──────────────────────┘         └──────────────────────┘         └──────────────────────┘
+            │                                │                                │
+            └──────────────────────────────┬─┴────────────────────────────────┘
+                                           │ Synchronized Identity
+                                           ▼
+                                ┌──────────────────────┐
+                                │        users         │ (Unified Relational Bridge)
+                                ├──────────────────────┤
+                                │ PK  id (INT auto)    │
+                                │     uid (10-digit)   │
+                                │     name, username   │
+                                │     email, password  │
+                                │     role             │
+                                └──────────┬───────────┘
+                                           │ 1:N
+                     ┌─────────────────────┼─────────────────────┐
+                     ▼                     ▼                     ▼
+          ┌────────────────────┐ ┌───────────────────┐ ┌───────────────────┐
+          │       groups       │ │   group_members   │ │       posts       │
+          ├────────────────────┤ ├───────────────────┤ ├───────────────────┤
+          │ PK  id             │ │ PK  id            │ │ PK  id            │
+          │     name           │ │ FK  group_id      │ │ FK  user_id       │
+          │     description    │ │ FK  user_id       │ │ FK  group_id      │
+          │     status         │ │     joined_at     │ │     title         │
+          │ FK  created_by     │ └───────────────────┘ │     content       │
+          └────────────────────┘                       └─────────┬─────────┘
+                                                                 │ 1:N
+                                              ┌──────────────────┴──────────────────┐
+                                              ▼                                     ▼
+                                   ┌──────────────────────┐              ┌──────────────────────┐
+                                   │     post_images      │              │       replies        │
+                                   ├──────────────────────┤              ├──────────────────────┤
+                                   │ PK  id               │              │ PK  id               │
+                                   │ FK  post_id          │              │ FK  post_id          │
+                                   │     image_url / data │              │ FK  user_id          │
+                                   │     created_at       │              │ FK  parent_id (self) │
+                                   └──────────────────────┘              │     content          │
+                                                                         └──────────────────────┘
 ```
 
-- **`users`**: Stores account details, hashed passwords, display names, bios, avatars, and banner pictures.
-- **`posts`**: Stores discussion titles, body text, timestamps, and the author's user ID.
-- **`post_images`**: Stores attached image data linked to their respective discussion post.
-- **`replies`**: Stores comments and replies linked to specific posts, with `parent_id` support for threaded conversations.
-- **`likes`**: Tracks likes on posts, ensuring each user can like or unlike individual discussions.
+- **`students`**: Dedicated storage for student accounts registered with unique 10-digit student IDs.
+- **`faculty`**: Dedicated storage for faculty and teacher accounts registered with unique 10-digit faculty IDs.
+- **`admins`**: Dedicated storage for authorized administrator accounts registered with unique 10-digit admin IDs.
+- **`authorized_admins`**: Institutional roster verifying pre-approved administrators and administrative authorization keys (`QUAD-ADMIN-2026`).
+- **`users`**: Unified relational bridge syncing with registered accounts to maintain clean foreign key relationships without complex polymorphics.
+- **`groups`**: Academic discussion groups (subject-wise, semester-wise, and department-wise) managed by Admins.
+- **`group_members`**: Group membership records gating post publishing to verified members.
+- **`posts`**: Group discussion posts with view counters, timestamps, and author associations.
+- **`post_images`**: Multi-image attachments linked to discussion posts.
+- **`replies`**: Threaded comments and nested replies under discussion posts.
+- **`likes`**: Post and reply reactions with duplicate prevention.
 
 ---
 
 ## ✨ Features Implemented
 
-### 1. User Registration & Secure Login
-- Simple account creation with name, lowercase username, email, and password confirmation.
-- Secure password hashing using PHP's native `password_hash()` and `password_verify()`.
-- Session-based authentication protecting discussion and profile routes from unauthenticated access.
+### 1. Three Separate Registration & Authentication Portals
+- **Student Portal**: Student ID (10 numeric digits), Full Name, Email, and Password.
+- **Faculty Portal**: Faculty ID (10 numeric digits), Full Name, Email, and Password.
+- **Admin Portal**: Admin ID (10 numeric digits), Institutional Authorization Key verification, Full Name, Email, and Password.
+- Strict cross-table unique validations (rejecting duplicate IDs or emails across all three tables).
+- Strict portal isolation: accounts registered in one category cannot sign in through another portal and receive clear authorization notices.
 
-### 2. Main Discussion Feed
-- A clean, centralized feed displaying recent discussions with author avatar, username, timestamps, and engagement counters (likes and replies).
-- Fast navigation to inspect individual posts and browse the full discussion thread.
-- Sidebar highlighting top recent discussions for quick discovery.
+### 2. Group-Based Discussion System
+- Admin controls for creating and restricting academic groups.
+- User group discovery, join/leave capabilities, and membership-gated posting.
+- Active vs. Restricted group status controls.
 
-### 3. Create, Edit & Delete Posts
-- Dedicated composer modal to draft posts with titles, descriptions, and up to 4 image attachments.
-- Authors can edit their existing post content and manage attached images.
-- Safe post deletion allowing authors to remove their discussions whenever needed (restricted to post owners).
-
-### 4. Interactive Feedback & Replies
-- Instant like/unlike toggle to give feedback on posts.
-- Threaded conversation replies under each discussion post.
-
-### 5. Profile & Customization
-- Dedicated user profile pages showing user information, join date, and discussion stats.
-- Tabbed interface separating user **Posts** and **Replies**.
-- In-place profile editor allowing users to update their display name, bio, avatar, and profile banner with real-time client previews.
+### 3. Interactive Discussion Feed & Moderation
+- Central and group-filtered discussion feeds.
+- Threaded replies, post interactions (likes/unlikes), and view counts.
+- Dedicated Admin dashboard with platform analytics and management controls.
 
 ---
 
 ## 🚀 Getting Started (Local Setup)
 
-To run Quaddit locally on your machine:
-
 ### Prerequisites
-- [XAMPP](https://www.apachefriends.org/) (with **Apache** and **MySQL** modules).
-- A modern web browser (Google Chrome, Microsoft Edge, Mozilla Firefox).
+- [XAMPP](https://www.apachefriends.org/) (Apache and MySQL modules).
+- A modern web browser.
 
 ### Setup Instructions
 
@@ -189,29 +192,32 @@ To run Quaddit locally on your machine:
    ```
 
 2. **Start Services in XAMPP Control Panel**:
-   - Start **Apache** (runs on port `80`, `443`).
-   - Start **MySQL** (runs on port `3306`).
+   - Start **Apache** (ports `80`, `443`).
+   - Start **MySQL** (port `3306`).
 
 3. **Import Database in phpMyAdmin**:
    - Open your browser and navigate to `http://localhost/phpmyadmin`.
-   - Create a new database named **`Quaddit`**.
-   - Create or import the required tables (`users`, `posts`, `post_images`, `replies`, `likes`).
+   - Click on the **Import** tab at the top.
+   - Choose the file [`schema.sql`](file:///c:/xampp/htdocs/FORUM-OR-DISCUSSION-BOARD/schema.sql) located in the project root directory.
+   - Click **Import** (or **Go**).
+   - phpMyAdmin will automatically drop any old structure and set up the complete `quaddit` database with all 11 tables and initial seed data.
 
-4. **Verify Database Configuration**:
-   The database connection settings are located in `db.php`:
-   ```php
-   $host   = '127.0.0.1';
-   $dbname = 'Quaddit';
-   $user   = 'root';
-   $pass   = '';
-   ```
+4. **Default Login Credentials (Ready to use)**:
+   All default accounts use the password: `password123`
+
+   | Portal | Account Type | 10-Digit ID / Email | Password | Role |
+   |---|---|---|---|---|
+   | **Admin** | Administrator | `9000000001` or `admin@quaddit.edu` | `password123` | System Administrator |
+   | **Faculty** | Faculty / Teacher | `5000000001` or `faculty@quaddit.edu` | `password123` | Faculty Member |
+   | **Student** | Student | `1000000001` or `student@quaddit.edu` | `password123` | Undergraduate Student |
+
+   *Institutional Admin Authorization Key for new admin registrations:* `QUAD-ADMIN-2026`
 
 5. **Launch the Application**:
    Open your browser and visit:
    ```
    http://localhost/FORUM-OR-DISCUSSION-BOARD/
    ```
-   Register a new account or log in to start exploring Quaddit!
 
 ---
 
