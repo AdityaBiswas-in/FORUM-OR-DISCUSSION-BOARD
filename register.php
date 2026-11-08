@@ -2,85 +2,133 @@
 require_once __DIR__ . '/db.php';
 
 if (is_logged_in()) {
-    header("Location: index.php");
+    if (is_admin()) {
+        header("Location: index.php?view=admin");
+    } else {
+        header("Location: index.php");
+    }
     exit;
 }
 
+// Determine active registration role
+$requestedRole = strtolower(trim($_GET['role'] ?? $_POST['reg_role'] ?? 'student'));
+if (!in_array($requestedRole, ['student', 'faculty', 'admin'])) {
+    $requestedRole = 'student';
+}
+
 $error = '';
+$success = '';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
-    $name     = trim($_POST['name'] ?? '');
-    $username = trim($_POST['username'] ?? '');
-    $email    = trim($_POST['email'] ?? '');
-    $password = $_POST['password'] ?? '';
-    $confirm  = $_POST['confirm_password'] ?? '';
+    $role       = strtolower(trim($_POST['reg_role'] ?? 'student'));
+    if (!in_array($role, ['student', 'faculty', 'admin'])) {
+        $role = 'student';
+    }
 
-    if (!$username || !$email || !$password || !$confirm) {
+    $name       = trim($_POST['name'] ?? '');
+    $email      = trim($_POST['email'] ?? '');
+    $account_id = trim($_POST['account_id'] ?? '');
+    $password   = $_POST['password'] ?? '';
+    $confirm    = $_POST['confirm_password'] ?? '';
+    $auth_key   = trim($_POST['auth_key'] ?? '');
+
+    // 1. Mandatory Field Validation
+    if ($name === '' || $email === '' || $account_id === '' || $password === '' || $confirm === '') {
         $error = 'Please fill in all required fields.';
-    } elseif ($username !== strtolower($username)) {
-        $error = 'Username must be in small letters.';
+    } elseif (!preg_match('/^[0-9]{10}$/', $account_id)) {
+        // 2. Strict 10-Digit Numeric ID Validation
+        $error = 'Unique ID must contain exactly 10 numeric digits (digits only, no letters or special characters).';
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        // 3. Email Validation
+        $error = 'Please enter a valid email address.';
     } elseif ($password !== $confirm) {
+        // 4. Password Confirmation
         $error = 'Passwords do not match.';
     } elseif (strlen($password) < 6) {
         $error = 'Password must be at least 6 characters.';
-    } elseif (strlen($password) > 255) {
-        $error = 'Password cannot exceed 255 characters.';
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error = 'Please enter a valid email address.';
-    } elseif ($conn->execute_query("SELECT id FROM users WHERE username = ? OR email = ? LIMIT 1", [$username, $email])->fetch_assoc()) {
-        $error = 'Username or email is already taken.';
+    } elseif (check_id_exists($account_id, $conn)) {
+        // 5. Cross-Table Unique ID Check (reject duplicates across students, faculty, and admins)
+        $error = 'This 10-digit ID is already registered in the system. Duplicate IDs are not permitted.';
+    } elseif (check_email_exists($email, $conn)) {
+        // 6. Cross-Table Unique Email Check
+        $error = 'This email address is already registered in the system. Please use a different email.';
     } else {
-        $conn->execute_query(
-            "INSERT INTO users (username, email, password, name, avatar, created_at) VALUES (?, ?, ?, ?, 'assets/images/avatar_default.svg', NOW())",
-            [$username, $email, password_hash($password, PASSWORD_DEFAULT), $name ?: $username]
-        );
-        $_SESSION['user_id'] = (int)$conn->insert_id;
-        header("Location: index.php");
-        exit;
+        // 7. Admin Security Authorization Check
+        if ($role === 'admin') {
+            $isAuthorizedAdmin = false;
+
+            // Check Master Institutional Authorization Key
+            if ($auth_key === 'QUAD-ADMIN-2026') {
+                $isAuthorizedAdmin = true;
+            } else {
+                // Check authorized_admins roster table
+                $authCheck = $conn->execute_query(
+                    "SELECT admin_id, auth_key, is_registered FROM authorized_admins WHERE admin_id = ? LIMIT 1",
+                    [$account_id]
+                )->fetch_assoc();
+
+                if ($authCheck && ($authCheck['auth_key'] === $auth_key || empty($auth_key))) {
+                    $isAuthorizedAdmin = true;
+                }
+            }
+
+            if (!$isAuthorizedAdmin) {
+                $error = 'Authorization Failed: Unauthorized Admin ID or invalid Admin Authorization Key.';
+            }
+        }
+
+        if (empty($error)) {
+            $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+            $defaultAvatar = 'assets/images/avatar_default.svg';
+
+            // Insert into the designated table
+            if ($role === 'student') {
+                $stmt = $conn->prepare("INSERT INTO students (id, name, email, password, avatar, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
+                $stmt->bind_param("sssss", $account_id, $name, $email, $hashedPassword, $defaultAvatar);
+                $stmt->execute();
+            } elseif ($role === 'faculty') {
+                $stmt = $conn->prepare("INSERT INTO faculty (id, name, email, password, avatar, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
+                $stmt->bind_param("sssss", $account_id, $name, $email, $hashedPassword, $defaultAvatar);
+                $stmt->execute();
+            } elseif ($role === 'admin') {
+                $stmt = $conn->prepare("INSERT INTO admins (id, name, email, password, avatar, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
+                $stmt->bind_param("sssss", $account_id, $name, $email, $hashedPassword, $defaultAvatar);
+                $stmt->execute();
+
+                // Mark as registered in authorized_admins if present
+                $conn->execute_query("UPDATE authorized_admins SET is_registered = 1 WHERE admin_id = ?", [$account_id]);
+            }
+
+            // Sync to unified users table so discussions, replies, likes, groups reference works seamlessly
+            $existingUser = $conn->execute_query("SELECT id FROM users WHERE uid = ? OR email = ? LIMIT 1", [$account_id, $email])->fetch_assoc();
+            if ($existingUser) {
+                $conn->execute_query(
+                    "UPDATE users SET uid = ?, name = ?, username = ?, email = ?, role = ?, account_type = ? WHERE id = ?",
+                    [$account_id, $name, $name, $email, $role, $role, $existingUser['id']]
+                );
+            } else {
+                $conn->execute_query(
+                    "INSERT INTO users (uid, username, name, email, role, account_type, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())",
+                    [$account_id, $name, $name, $email, $role, $role, $defaultAvatar]
+                );
+            }
+
+            // Redirect to Login page with account-type pre-selected
+            header("Location: login.php?role=" . urlencode($role) . "&registered=1&id=" . urlencode($account_id));
+            exit;
+        }
     }
 }
 ?>
-
-
-
-
-<!-- ========================================
-HTML PART
-======================================== -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Create an Account | Quaddit</title>
+  <title>Create <?= ucfirst($requestedRole) ?> Account | Quaddit</title>
   <link rel="icon" type="image/png" sizes="32x32" href="assets/images/logo-transparent.png?v=7">
   <link rel="shortcut icon" href="assets/images/favicon.ico?v=7">
   <link rel="stylesheet" href="assets/css/auth.css?v=<?= time() ?>">
-  <style>
-    /* Direct inline autofill reset to override browser defaults immediately */
-    input:-webkit-autofill,
-    input:-webkit-autofill:hover, 
-    input:-webkit-autofill:focus, 
-    input:-webkit-autofill:active {
-      -webkit-box-shadow: 0 0 0 1000px #091424 inset !important;
-      -webkit-text-fill-color: #f8fafc !important;
-      caret-color: #f8fafc !important;
-      border-radius: 12px !important;
-      border: 1px solid #1e2e47 !important;
-      transition: background-color 500000s ease-in-out 0s, color 500000s ease-in-out 0s !important;
-    }
-    [data-theme="light"] input:-webkit-autofill,
-    [data-theme="light"] input:-webkit-autofill:hover, 
-    [data-theme="light"] input:-webkit-autofill:focus, 
-    [data-theme="light"] input:-webkit-autofill:active {
-      -webkit-box-shadow: 0 0 0 1000px #f8fafc inset !important;
-      -webkit-text-fill-color: #0f172a !important;
-      caret-color: #0f172a !important;
-      border-radius: 12px !important;
-      border: 1px solid #cbd5e1 !important;
-      transition: background-color 500000s ease-in-out 0s, color 500000s ease-in-out 0s !important;
-    }
-  </style>
   <script>
     (function() {
       const savedTheme = localStorage.getItem('campus_theme') || 'dark';
@@ -89,20 +137,20 @@ HTML PART
   </script>
 </head>
 <body class="auth-page">
-  <!-- Theme Toggle Floating Pill -->
+  <!-- Theme Toggle -->
   <button type="button" class="auth-theme-toggle" onclick="toggleAuthTheme()" id="auth-theme-btn" title="Toggle Light/Dark Theme">
     <span id="auth-theme-icon">🌙</span>
     <span id="auth-theme-text">Dark</span>
   </button>
 
-  <!-- Campus Night Background matching Design -->
+  <!-- Campus Background Layers -->
   <div class="auth-bg-layer"></div>
   <div class="auth-overlay-gradient"></div>
 
-  <div class="auth-wrapper" style="margin: auto;">
+  <div class="auth-wrapper">
     <!-- Brand Header -->
     <div class="auth-header-branding">
-      <div class="auth-logo-bubbles">
+      <div class="auth-logo-wrap">
         <img src="assets/images/logo-dark-theme.png?v=9" alt="Quaddit Logo" class="logo-for-dark">
         <img src="assets/images/logo-light-theme.png?v=9" alt="Quaddit Logo" class="logo-for-light">
       </div>
@@ -110,14 +158,42 @@ HTML PART
       <p class="auth-tagline">Share ideas. Ask questions. Grow together.</p>
     </div>
 
-    <!-- Register Frosted Card -->
+    <!-- Clean Auth Card -->
     <div class="auth-card">
-      <h2 class="auth-card-title">Create an Account</h2>
-      <p class="auth-card-subtitle">Join Quaddit and start discussing</p>
+      
+      <!-- 3-Segment Registration Switcher -->
+      <nav class="auth-role-tabs" aria-label="Account Type Selection">
+        <a href="register.php?role=student" class="auth-role-tab role-tab-student <?= $requestedRole === 'student' ? 'active' : '' ?>">
+          <span class="role-dot" aria-hidden="true"></span>
+          <span>Student</span>
+        </a>
+        <a href="register.php?role=faculty" class="auth-role-tab role-tab-faculty <?= $requestedRole === 'faculty' ? 'active' : '' ?>">
+          <span class="role-dot" aria-hidden="true"></span>
+          <span>Faculty</span>
+        </a>
+        <a href="register.php?role=admin" class="auth-role-tab role-tab-admin <?= $requestedRole === 'admin' ? 'active' : '' ?>">
+          <span class="role-dot" aria-hidden="true"></span>
+          <span>Admin</span>
+        </a>
+      </nav>
+
+      <!-- Card Title & Description -->
+      <div class="auth-card-header">
+        <?php if ($requestedRole === 'admin'): ?>
+          <h2 class="auth-card-title">Admin Registration</h2>
+          <p class="auth-card-subtitle">Register your authorized 10-digit ID to access administrative tools.</p>
+        <?php elseif ($requestedRole === 'faculty'): ?>
+          <h2 class="auth-card-title">Faculty Registration</h2>
+          <p class="auth-card-subtitle">Create a faculty account using your official 10-digit Faculty ID.</p>
+        <?php else: ?>
+          <h2 class="auth-card-title">Student Registration</h2>
+          <p class="auth-card-subtitle">Create a student account using your 10-digit Student ID.</p>
+        <?php endif; ?>
+      </div>
 
       <?php if (!empty($error)): ?>
-        <div class="auth-alert auth-alert-error">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <div class="auth-alert auth-alert-error" role="alert">
+          <svg class="auth-alert-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"></circle>
             <line x1="12" y1="8" x2="12" y2="12"></line>
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
@@ -126,100 +202,76 @@ HTML PART
         </div>
       <?php endif; ?>
 
-      <form action="register.php" method="POST" class="auth-form" id="register-form">
-        <!-- Full Name input (optional) -->
-        <div class="auth-field-box">
-          <svg class="field-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-            <circle cx="12" cy="7" r="4"></circle>
-          </svg>
-          <input type="text" name="name" class="auth-input" placeholder="Full Name (e.g. Aditya Biswas)" value="<?= isset($_POST['name']) ? e($_POST['name']) : '' ?>" autocomplete="name">
+      <form action="register.php?role=<?= e($requestedRole) ?>" method="POST" class="auth-form" id="register-form" autocomplete="off">
+        <input type="hidden" name="reg_role" value="<?= e($requestedRole) ?>">
+
+        <!-- 1. Full Name -->
+        <div class="form-group">
+          <label for="reg-name" class="form-label">Full Name <span class="required" aria-hidden="true">*</span></label>
+          <input type="text" name="name" id="reg-name" class="form-control" placeholder="<?= $requestedRole === 'admin' ? 'e.g. Admin Officer' : ($requestedRole === 'faculty' ? 'e.g. Dr. Sarah Connor' : 'e.g. Aditya Biswas') ?>" value="<?= isset($_POST['name']) ? e($_POST['name']) : '' ?>" autocomplete="name" required>
         </div>
 
-        <!-- Username input -->
-        <div class="auth-field-box">
-          <svg class="field-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="4"></circle>
-            <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"></path>
-          </svg>
-          <input type="text" name="username" class="auth-input" placeholder="Choose a username (e.g. aditya)" value="<?= isset($_POST['username']) ? e($_POST['username']) : '' ?>" autocomplete="username" autocapitalize="none" oninput="this.value = this.value.toLowerCase()" required>
+        <!-- 2. Email Address -->
+        <div class="form-group">
+          <label for="reg-email" class="form-label">Email Address <span class="required" aria-hidden="true">*</span></label>
+          <input type="email" name="email" id="reg-email" class="form-control" placeholder="<?= $requestedRole === 'student' ? 'e.g. student@college.edu' : 'e.g. faculty@college.edu' ?>" value="<?= isset($_POST['email']) ? e($_POST['email']) : '' ?>" autocomplete="email" required>
         </div>
 
-        <!-- Email input -->
-        <div class="auth-field-box">
-          <svg class="field-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="2" y="4" width="20" height="16" rx="2"></rect>
-            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
-          </svg>
-          <input type="email" name="email" class="auth-input" placeholder="Email address (e.g. student@college.edu)" value="<?= isset($_POST['email']) ? e($_POST['email']) : '' ?>" autocomplete="email" required>
+        <!-- 3. Unique 10-Digit ID -->
+        <div class="form-group">
+          <div class="form-label-row">
+            <label for="account_id_input" class="form-label">10-Digit <?= ucfirst($requestedRole) ?> ID <span class="required" aria-hidden="true">*</span></label>
+            <span class="form-label-hint">Digits only</span>
+          </div>
+          <input type="text" name="account_id" id="account_id_input" class="form-control" placeholder="<?= $requestedRole === 'admin' ? 'e.g. 9000000001' : ($requestedRole === 'faculty' ? 'e.g. 2000000001' : 'e.g. 1000000001') ?>" value="<?= isset($_POST['account_id']) ? e($_POST['account_id']) : '' ?>" maxlength="10" pattern="[0-9]{10}" inputmode="numeric" required oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 10)">
+          <span class="form-help-text">Enter your official 10-digit institutional ID number.</span>
         </div>
 
-        <!-- Password input -->
-        <div class="auth-field-box">
-          <svg class="field-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-          </svg>
-          <input type="password" name="password" id="reg-password" class="auth-input has-eye" placeholder="Password (minimum 6 characters)" autocomplete="new-password" required>
-          <button type="button" class="btn-toggle-eye" onclick="togglePasswordVisibility('reg-password', this)" aria-label="Toggle password visibility" title="Show password">
-            <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path>
-              <circle cx="12" cy="12" r="3"></circle>
-            </svg>
-          </button>
+        <!-- 4. Password -->
+        <div class="form-group">
+          <label for="reg-password" class="form-label">Password <span class="required" aria-hidden="true">*</span></label>
+          <div class="input-password-wrap">
+            <input type="password" name="password" id="reg-password" class="form-control" placeholder="Minimum 6 characters" autocomplete="new-password" required>
+            <button type="button" class="btn-toggle-eye" onclick="togglePasswordVisibility('reg-password', this)" aria-label="Toggle password visibility" title="Show password">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </button>
+          </div>
         </div>
 
-        <!-- Confirm Password input -->
-        <div class="auth-field-box">
-          <svg class="field-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-          </svg>
-          <input type="password" name="confirm_password" id="reg-confirm-password" class="auth-input has-eye" placeholder="Confirm your password" autocomplete="new-password" required>
-          <button type="button" class="btn-toggle-eye" onclick="togglePasswordVisibility('reg-confirm-password', this)" aria-label="Toggle password visibility" title="Show password">
-            <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path>
-              <circle cx="12" cy="12" r="3"></circle>
-            </svg>
-          </button>
+        <!-- 5. Confirm Password -->
+        <div class="form-group">
+          <label for="reg-confirm-password" class="form-label">Confirm Password <span class="required" aria-hidden="true">*</span></label>
+          <div class="input-password-wrap">
+            <input type="password" name="confirm_password" id="reg-confirm-password" class="form-control" placeholder="Re-enter your password" autocomplete="new-password" required>
+            <button type="button" class="btn-toggle-eye" onclick="togglePasswordVisibility('reg-confirm-password', this)" aria-label="Toggle password visibility" title="Show password">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </button>
+          </div>
         </div>
+
+        <?php if ($requestedRole === 'admin'): ?>
+          <!-- Admin Security Authorization Key -->
+          <div class="form-group">
+            <label for="reg-auth-key" class="form-label">Admin Authorization Key <span class="required" aria-hidden="true">*</span></label>
+            <input type="text" name="auth_key" id="reg-auth-key" class="form-control" placeholder="Enter authorization key" value="<?= isset($_POST['auth_key']) ? e($_POST['auth_key']) : '' ?>" required>
+            <span class="form-help-text">Authorized key: <code>QUAD-ADMIN-2026</code> (or verified roster ID).</span>
+          </div>
+        <?php endif; ?>
 
         <!-- Submit Button -->
-        <button type="submit" class="btn-auth-submit" id="btn-reg-submit">Create Account</button>
+        <button type="submit" class="btn-auth-submit <?= $requestedRole === 'admin' ? 'btn-auth-admin' : ($requestedRole === 'faculty' ? 'btn-auth-faculty' : '') ?>" id="btn-reg-submit">
+          <?= $requestedRole === 'admin' ? 'Create Admin Account' : ($requestedRole === 'faculty' ? 'Create Faculty Account' : 'Create Student Account') ?>
+        </button>
 
-        <!-- Divider -->
-        <div class="auth-divider">
-          <span>or sign up with</span>
-        </div>
-
-        <!-- Social Icons matching Image 2 -->
-        <div class="auth-social-row">
-          <button type="button" class="btn-social" title="Continue with Google" onclick="alert('Please sign up using your email and password above.');">
-            <svg width="20" height="20" viewBox="0 0 24 24">
-              <path fill="#EA4335" d="M12 5c1.56 0 2.98.54 4.09 1.58l3.07-3.07C17.3 1.77 14.84 1 12 1 7.42 1 3.53 3.61 1.71 7.39l3.66 2.84C6.25 7.37 8.88 5 12 5z"/>
-              <path fill="#4285F4" d="M23.49 12.28c0-.79-.07-1.54-.19-2.28H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58l3.68 2.86c2.14-1.98 3.74-4.89 3.74-8.67z"/>
-              <path fill="#FBBC05" d="M5.37 14.77c-.24-.72-.37-1.49-.37-2.77s.13-1.55.37-2.27L1.71 7.39C.62 9.56 0 11.97 0 14.5s.62 4.94 1.71 7.11l3.66-2.84z"/>
-              <path fill="#34A853" d="M12 23.5c3.24 0 5.96-1.08 7.95-2.92l-3.68-2.86c-1.08.72-2.46 1.15-4.27 1.15-3.12 0-5.75-2.37-6.63-5.23L1.71 16.48C3.53 20.26 7.42 22.87 12 23.5z"/>
-            </svg>
-          </button>
-          <button type="button" class="btn-social" title="Continue with GitHub" onclick="alert('Please sign up using your email and password above.');">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="#ffffff">
-              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
-            </svg>
-          </button>
-          <button type="button" class="btn-social" title="Continue with Microsoft" onclick="alert('Please sign up using your email and password above.');">
-            <svg width="18" height="18" viewBox="0 0 24 24">
-              <path fill="#F25022" d="M1 1h10v10H1z"/>
-              <path fill="#7FBA00" d="M13 1h10v10H13z"/>
-              <path fill="#00A4EF" d="M1 13h10v10H1z"/>
-              <path fill="#FFB900" d="M13 13h10v10H13z"/>
-            </svg>
-          </button>
-        </div>
-
-        <!-- Footer Switch Link -->
+        <!-- Footer Link -->
         <p class="auth-footer-prompt">
-          Already have an account? <a href="login.php">Login</a>
+          Already have an account? <a href="login.php?role=<?= e($requestedRole) ?>">Sign in</a>
         </p>
       </form>
     </div>
@@ -253,18 +305,17 @@ HTML PART
       if (!input) return;
       if (input.type === 'password') {
         input.type = 'text';
-        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
+        btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
         btn.setAttribute('aria-label', 'Hide password');
         btn.setAttribute('title', 'Hide password');
       } else {
         input.type = 'password';
-        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+        btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
         btn.setAttribute('aria-label', 'Show password');
         btn.setAttribute('title', 'Show password');
       }
     }
 
-    // Submit animation feedback
     document.getElementById('register-form').addEventListener('submit', function() {
       const btn = document.getElementById('btn-reg-submit');
       if (btn) {

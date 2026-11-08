@@ -1,96 +1,244 @@
 <?php
 require_once __DIR__ . '/db.php';
 
+// Determine active login portal
+$requestedRole = strtolower(trim($_GET['role'] ?? $_POST['login_role'] ?? 'student'));
+if (!in_array($requestedRole, ['student', 'faculty', 'admin'])) {
+    $requestedRole = 'student';
+}
+
 if (is_logged_in()) {
-    header("Location: index.php");
+    if (is_admin()) {
+        header("Location: index.php?view=admin");
+    } else {
+        header("Location: index.php");
+    }
     exit;
 }
 
 $error = '';
-$success = isset($_GET['registered']) ? 'Account created! Please log in.' : (isset($_GET['logged_out']) ? 'You have signed out.' : '');
-$login_input = trim($_GET['username'] ?? '');
+$registeredType = $_GET['registered'] ?? '';
+$registeredId   = trim($_GET['id'] ?? '');
+
+$success = '';
+if ($registeredType === '1') {
+    $success = ucfirst($requestedRole) . ' account created successfully! Please sign in below.';
+} elseif (isset($_GET['logged_out'])) {
+    $success = 'You have signed out.';
+}
+
+$login_input = $registeredId ?: trim($_GET['username'] ?? '');
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $action = $_POST['action'] ?? 'login';
+    $login_role = strtolower(trim($_POST['login_role'] ?? 'student'));
+    if (!in_array($login_role, ['student', 'faculty', 'admin'])) {
+        $login_role = 'student';
+    }
 
     if ($action === 'bypass_login') {
         $input = trim($_POST['bypass_email'] ?? '');
-        $user = $conn->execute_query("SELECT id FROM users WHERE username = ? OR email = ? LIMIT 1", [$input, $input])->fetch_assoc();
-        if ($user) {
-            $_SESSION['user_id'] = (int)$user['id'];
-            header("Location: index.php");
-            exit;
-        }
-        $error = 'No user account found.';
-    } else {
-        $login_input = trim($_POST['login_input'] ?? '');
-        $password = $_POST['password'] ?? '';
 
-        if (empty($login_input) || empty($password)) {
-            $error = 'Please fill in all fields.';
-        } else {
-            $user = $conn->execute_query("SELECT * FROM users WHERE username = ? OR email = ? LIMIT 1", [$login_input, $login_input])->fetch_assoc();
-
-            if ($user && (password_verify($password, $user['password']) || $user['password'] === $password)) {
-                // If legacy plain-text, upgrade to hash
-                if ($user['password'] === $password) {
-                    $conn->execute_query("UPDATE users SET password = ? WHERE id = ?", [password_hash($password, PASSWORD_DEFAULT), $user['id']]);
+        if ($login_role === 'student') {
+            $account = $conn->execute_query("SELECT * FROM students WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_assoc();
+            if ($account) {
+                $u = $conn->execute_query("SELECT id FROM users WHERE uid = ? OR email = ? LIMIT 1", [$account['id'], $account['email']])->fetch_assoc();
+                $userId = $u ? (int)$u['id'] : 0;
+                if (!$userId) {
+                    $conn->execute_query("INSERT INTO users (uid, username, name, email, role, account_type, avatar, created_at) VALUES (?, ?, ?, ?, 'student', 'student', ?, NOW())", [$account['id'], $account['name'], $account['name'], $account['email'], $account['avatar']]);
+                    $userId = (int)$conn->insert_id;
                 }
-                $_SESSION['user_id'] = (int)$user['id'];
+                $_SESSION['user_id'] = $userId;
+                $_SESSION['account_id'] = $account['id'];
+                $_SESSION['account_type'] = 'student';
+                $_SESSION['user_role'] = 'student';
+                $_SESSION['user_name'] = $account['name'];
                 header("Location: index.php");
                 exit;
+            } else {
+                // Check if account belongs to another portal
+                $inOther = $conn->execute_query("SELECT 1 FROM faculty WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_row()
+                        || $conn->execute_query("SELECT 1 FROM admins WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_row();
+                $error = $inOther 
+                    ? "Invalid ID or account type. This account is not authorized to access this portal." 
+                    : "No student account found with the provided identifier.";
             }
-            $error = 'Invalid username/email or password.';
+        } elseif ($login_role === 'faculty') {
+            $account = $conn->execute_query("SELECT * FROM faculty WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_assoc();
+            if ($account) {
+                $u = $conn->execute_query("SELECT id FROM users WHERE uid = ? OR email = ? LIMIT 1", [$account['id'], $account['email']])->fetch_assoc();
+                $userId = $u ? (int)$u['id'] : 0;
+                if (!$userId) {
+                    $conn->execute_query("INSERT INTO users (uid, username, name, email, role, account_type, avatar, created_at) VALUES (?, ?, ?, ?, 'faculty', 'faculty', ?, NOW())", [$account['id'], $account['name'], $account['name'], $account['email'], $account['avatar']]);
+                    $userId = (int)$conn->insert_id;
+                }
+                $_SESSION['user_id'] = $userId;
+                $_SESSION['account_id'] = $account['id'];
+                $_SESSION['account_type'] = 'faculty';
+                $_SESSION['user_role'] = 'faculty';
+                $_SESSION['user_name'] = $account['name'];
+                header("Location: index.php");
+                exit;
+            } else {
+                $inOther = $conn->execute_query("SELECT 1 FROM students WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_row()
+                        || $conn->execute_query("SELECT 1 FROM admins WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_row();
+                $error = $inOther 
+                    ? "Invalid ID or account type. This account is not authorized to access this portal." 
+                    : "No faculty account found with the provided identifier.";
+            }
+        } elseif ($login_role === 'admin') {
+            $account = $conn->execute_query("SELECT * FROM admins WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_assoc();
+            if ($account) {
+                $u = $conn->execute_query("SELECT id FROM users WHERE uid = ? OR email = ? LIMIT 1", [$account['id'], $account['email']])->fetch_assoc();
+                $userId = $u ? (int)$u['id'] : 0;
+                if (!$userId) {
+                    $conn->execute_query("INSERT INTO users (uid, username, name, email, role, account_type, avatar, created_at) VALUES (?, ?, ?, ?, 'admin', 'admin', ?, NOW())", [$account['id'], $account['name'], $account['name'], $account['email'], $account['avatar']]);
+                    $userId = (int)$conn->insert_id;
+                }
+                $_SESSION['user_id'] = $userId;
+                $_SESSION['account_id'] = $account['id'];
+                $_SESSION['account_type'] = 'admin';
+                $_SESSION['user_role'] = 'admin';
+                $_SESSION['user_name'] = $account['name'];
+                header("Location: index.php?view=admin");
+                exit;
+            } else {
+                $inOther = $conn->execute_query("SELECT 1 FROM students WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_row()
+                        || $conn->execute_query("SELECT 1 FROM faculty WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_row();
+                $error = $inOther 
+                    ? "Invalid ID or account type. This account is not authorized to access this portal." 
+                    : "No administrator account found with the provided identifier.";
+            }
+        }
+    } else {
+        // Standard Login
+        $login_input = trim($_POST['login_input'] ?? '');
+        $password    = $_POST['password'] ?? '';
+
+        if ($login_input === '' || $password === '') {
+            $error = 'Please fill in all fields.';
+        } elseif ($login_role === 'student') {
+            // Authenticate against students table (supports 10-digit ID, Email, or Full Name)
+            $account = $conn->execute_query("SELECT * FROM students WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$login_input, $login_input, $login_input])->fetch_assoc();
+
+            if ($account) {
+                if (password_verify($password, $account['password']) || $account['password'] === $password) {
+                    if ($account['password'] === $password) {
+                        $conn->execute_query("UPDATE students SET password = ? WHERE id = ?", [password_hash($password, PASSWORD_DEFAULT), $account['id']]);
+                    }
+
+                    $u = $conn->execute_query("SELECT id FROM users WHERE uid = ? OR email = ? LIMIT 1", [$account['id'], $account['email']])->fetch_assoc();
+                    $userId = $u ? (int)$u['id'] : 0;
+                    if (!$userId) {
+                        $conn->execute_query("INSERT INTO users (uid, username, name, email, role, account_type, avatar, created_at) VALUES (?, ?, ?, ?, 'student', 'student', ?, NOW())", [$account['id'], $account['name'], $account['name'], $account['email'], $account['avatar']]);
+                        $userId = (int)$conn->insert_id;
+                    }
+
+                    $_SESSION['user_id'] = $userId;
+                    $_SESSION['account_id'] = $account['id'];
+                    $_SESSION['account_type'] = 'student';
+                    $_SESSION['user_role'] = 'student';
+                    $_SESSION['user_name'] = $account['name'];
+
+                    header("Location: index.php");
+                    exit;
+                } else {
+                    $error = 'Invalid password. Please check your credentials.';
+                }
+            } else {
+                // Strict Login Restriction Check
+                $inFaculty = $conn->execute_query("SELECT 1 FROM faculty WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$login_input, $login_input, $login_input])->fetch_row();
+                $inAdmin   = $conn->execute_query("SELECT 1 FROM admins WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$login_input, $login_input, $login_input])->fetch_row();
+
+                if ($inFaculty || $inAdmin) {
+                    $error = 'Invalid ID or account type. This account is not authorized to access this portal.';
+                } else {
+                    $error = 'No student account found with the provided identifier.';
+                }
+            }
+        } elseif ($login_role === 'faculty') {
+            // Authenticate against faculty table (supports 10-digit ID, Email, or Full Name)
+            $account = $conn->execute_query("SELECT * FROM faculty WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$login_input, $login_input, $login_input])->fetch_assoc();
+
+            if ($account) {
+                if (password_verify($password, $account['password'])) {
+                    $u = $conn->execute_query("SELECT id FROM users WHERE uid = ? OR email = ? LIMIT 1", [$account['id'], $account['email']])->fetch_assoc();
+                    $userId = $u ? (int)$u['id'] : 0;
+                    if (!$userId) {
+                        $conn->execute_query("INSERT INTO users (uid, username, name, email, role, account_type, avatar, created_at) VALUES (?, ?, ?, ?, 'faculty', 'faculty', ?, NOW())", [$account['id'], $account['name'], $account['name'], $account['email'], $account['avatar']]);
+                        $userId = (int)$conn->insert_id;
+                    }
+
+                    $_SESSION['user_id'] = $userId;
+                    $_SESSION['account_id'] = $account['id'];
+                    $_SESSION['account_type'] = 'faculty';
+                    $_SESSION['user_role'] = 'faculty';
+                    $_SESSION['user_name'] = $account['name'];
+
+                    header("Location: index.php");
+                    exit;
+                } else {
+                    $error = 'Invalid password. Please check your credentials.';
+                }
+            } else {
+                // Strict Login Restriction Check
+                $inStudent = $conn->execute_query("SELECT 1 FROM students WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$login_input, $login_input, $login_input])->fetch_row();
+                $inAdmin   = $conn->execute_query("SELECT 1 FROM admins WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$login_input, $login_input, $login_input])->fetch_row();
+
+                if ($inStudent || $inAdmin) {
+                    $error = 'Invalid ID or account type. This account is not authorized to access this portal.';
+                } else {
+                    $error = 'No faculty account found with the provided identifier.';
+                }
+            }
+        } elseif ($login_role === 'admin') {
+            // Authenticate against admins table (supports 10-digit ID, Email, or Full Name)
+            $account = $conn->execute_query("SELECT * FROM admins WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$login_input, $login_input, $login_input])->fetch_assoc();
+
+            if ($account) {
+                if (password_verify($password, $account['password'])) {
+                    $u = $conn->execute_query("SELECT id FROM users WHERE uid = ? OR email = ? LIMIT 1", [$account['id'], $account['email']])->fetch_assoc();
+                    $userId = $u ? (int)$u['id'] : 0;
+                    if (!$userId) {
+                        $conn->execute_query("INSERT INTO users (uid, username, name, email, role, account_type, avatar, created_at) VALUES (?, ?, ?, ?, 'admin', 'admin', ?, NOW())", [$account['id'], $account['name'], $account['name'], $account['email'], $account['avatar']]);
+                        $userId = (int)$conn->insert_id;
+                    }
+
+                    $_SESSION['user_id'] = $userId;
+                    $_SESSION['account_id'] = $account['id'];
+                    $_SESSION['account_type'] = 'admin';
+                    $_SESSION['user_role'] = 'admin';
+                    $_SESSION['user_name'] = $account['name'];
+
+                    header("Location: index.php?view=admin");
+                    exit;
+                } else {
+                    $error = 'Invalid password. Please check your credentials.';
+                }
+            } else {
+                // Strict Login Restriction Check
+                $inStudent = $conn->execute_query("SELECT 1 FROM students WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$login_input, $login_input, $login_input])->fetch_row();
+                $inFaculty = $conn->execute_query("SELECT 1 FROM faculty WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$login_input, $login_input, $login_input])->fetch_row();
+
+                if ($inStudent || $inFaculty) {
+                    $error = 'Invalid ID or account type. This account is not authorized to access this portal.';
+                } else {
+                    $error = 'No administrator account found with the provided identifier.';
+                }
+            }
         }
     }
 }
 ?>
-
-
-
-
-
-
-
-<!-- ========================================
-HTML PART
-======================================== -->
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login | Quaddit</title>
+  <title><?= ucfirst($requestedRole) ?> Login | Quaddit</title>
   <link rel="icon" type="image/png" sizes="32x32" href="assets/images/logo-transparent.png?v=7">
   <link rel="shortcut icon" href="assets/images/favicon.ico?v=7">
   <link rel="stylesheet" href="assets/css/auth.css?v=<?= time() ?>">
-  <style>
-    /* Direct inline autofill reset to override browser defaults immediately */
-    input:-webkit-autofill,
-    input:-webkit-autofill:hover, 
-    input:-webkit-autofill:focus, 
-    input:-webkit-autofill:active {
-      -webkit-box-shadow: 0 0 0 1000px #091424 inset !important;
-      -webkit-text-fill-color: #f8fafc !important;
-      caret-color: #f8fafc !important;
-      border-radius: 12px !important;
-      border: 1px solid #1e2e47 !important;
-      transition: background-color 500000s ease-in-out 0s, color 500000s ease-in-out 0s !important;
-    }
-    [data-theme="light"] input:-webkit-autofill,
-    [data-theme="light"] input:-webkit-autofill:hover, 
-    [data-theme="light"] input:-webkit-autofill:focus, 
-    [data-theme="light"] input:-webkit-autofill:active {
-      -webkit-box-shadow: 0 0 0 1000px #f8fafc inset !important;
-      -webkit-text-fill-color: #0f172a !important;
-      caret-color: #0f172a !important;
-      border-radius: 12px !important;
-      border: 1px solid #cbd5e1 !important;
-      transition: background-color 500000s ease-in-out 0s, color 500000s ease-in-out 0s !important;
-    }
-  </style>
   <script>
     (function() {
       const savedTheme = localStorage.getItem('campus_theme') || 'dark';
@@ -99,20 +247,20 @@ HTML PART
   </script>
 </head>
 <body class="auth-page">
-  <!-- Theme Toggle Floating Pill -->
+  <!-- Theme Toggle -->
   <button type="button" class="auth-theme-toggle" onclick="toggleAuthTheme()" id="auth-theme-btn" title="Toggle Light/Dark Theme">
     <span id="auth-theme-icon">🌙</span>
     <span id="auth-theme-text">Dark</span>
   </button>
 
-  <!-- Campus Night Background matching Design -->
+  <!-- Campus Background Layers -->
   <div class="auth-bg-layer"></div>
   <div class="auth-overlay-gradient"></div>
 
-  <div class="auth-wrapper" style="margin: auto;">
+  <div class="auth-wrapper">
     <!-- Brand Header -->
     <div class="auth-header-branding">
-      <div class="auth-logo-bubbles">
+      <div class="auth-logo-wrap">
         <img src="assets/images/logo-dark-theme.png?v=9" alt="Quaddit Logo" class="logo-for-dark">
         <img src="assets/images/logo-light-theme.png?v=9" alt="Quaddit Logo" class="logo-for-light">
       </div>
@@ -120,14 +268,42 @@ HTML PART
       <p class="auth-tagline">Share ideas. Ask questions. Grow together.</p>
     </div>
 
-    <!-- Login Frosted Card -->
+    <!-- Clean Auth Card -->
     <div class="auth-card">
-      <h2 class="auth-card-title">Welcome Back</h2>
-      <p class="auth-card-subtitle">Login to continue to Quaddit</p>
+      
+      <!-- 3-Segment Login Switcher -->
+      <nav class="auth-role-tabs" aria-label="Account Type Selection">
+        <a href="login.php?role=student" class="auth-role-tab role-tab-student <?= $requestedRole === 'student' ? 'active' : '' ?>">
+          <span class="role-dot" aria-hidden="true"></span>
+          <span>Student</span>
+        </a>
+        <a href="login.php?role=faculty" class="auth-role-tab role-tab-faculty <?= $requestedRole === 'faculty' ? 'active' : '' ?>">
+          <span class="role-dot" aria-hidden="true"></span>
+          <span>Faculty</span>
+        </a>
+        <a href="login.php?role=admin" class="auth-role-tab role-tab-admin <?= $requestedRole === 'admin' ? 'active' : '' ?>">
+          <span class="role-dot" aria-hidden="true"></span>
+          <span>Admin</span>
+        </a>
+      </nav>
+
+      <!-- Card Title & Description -->
+      <div class="auth-card-header">
+        <?php if ($requestedRole === 'admin'): ?>
+          <h2 class="auth-card-title">Admin Sign In</h2>
+          <p class="auth-card-subtitle">Sign in with your Full Name, Email, or 10-digit Admin ID.</p>
+        <?php elseif ($requestedRole === 'faculty'): ?>
+          <h2 class="auth-card-title">Faculty Sign In</h2>
+          <p class="auth-card-subtitle">Sign in with your Full Name, Email, or 10-digit Faculty ID.</p>
+        <?php else: ?>
+          <h2 class="auth-card-title">Student Sign In</h2>
+          <p class="auth-card-subtitle">Sign in with your Full Name, Email, or 10-digit Student ID.</p>
+        <?php endif; ?>
+      </div>
 
       <?php if (!empty($error)): ?>
-        <div class="auth-alert auth-alert-error">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <div class="auth-alert auth-alert-error" role="alert">
+          <svg class="auth-alert-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"></circle>
             <line x1="12" y1="8" x2="12" y2="12"></line>
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
@@ -137,8 +313,8 @@ HTML PART
       <?php endif; ?>
 
       <?php if (!empty($success)): ?>
-        <div class="auth-alert auth-alert-success">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <div class="auth-alert auth-alert-success" role="status">
+          <svg class="auth-alert-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
             <polyline points="22 4 12 14.01 9 11.01"></polyline>
           </svg>
@@ -146,111 +322,80 @@ HTML PART
         </div>
       <?php endif; ?>
 
-      <form action="login.php" method="POST" class="auth-form" id="login-form" autocomplete="off">
+      <form action="login.php?role=<?= e($requestedRole) ?>" method="POST" class="auth-form" id="login-form" autocomplete="off">
         <input type="hidden" name="action" value="login">
+        <input type="hidden" name="login_role" value="<?= e($requestedRole) ?>">
 
-        <!-- Email or Username field -->
-        <div class="auth-field-box">
-          <svg class="field-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="2" y="4" width="20" height="16" rx="2"></rect>
-            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
-          </svg>
-          <input type="text" name="login_input" id="login-input" class="auth-input" placeholder="Enter your email or username" value="<?= !empty($error) && isset($_POST['login_input']) ? e($_POST['login_input']) : '' ?>" autocomplete="off" readonly onfocus="this.removeAttribute('readonly');" required>
+        <!-- Identifier input -->
+        <div class="form-group">
+          <label for="login-input" class="form-label">
+            <?= $requestedRole === 'admin' ? 'Admin ID, Email, or Full Name' : ($requestedRole === 'faculty' ? 'Faculty ID, Email, or Full Name' : 'Student ID, Email, or Full Name') ?>
+            <span class="required" aria-hidden="true">*</span>
+          </label>
+          <input type="text" name="login_input" id="login-input" class="form-control" placeholder="<?= $requestedRole === 'admin' ? 'e.g. 9000000001' : ($requestedRole === 'faculty' ? 'e.g. 2000000001' : 'e.g. 1000000001') ?>" value="<?= !empty($login_input) ? e($login_input) : '' ?>" autocomplete="username" required>
         </div>
 
-        <!-- Password field with eye toggle -->
-        <div class="auth-field-box">
-          <svg class="field-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-          </svg>
-          <input type="password" name="password" id="login-password" class="auth-input has-eye" placeholder="Enter your password" autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly');" required>
-          <button type="button" class="btn-toggle-eye" onclick="togglePasswordVisibility('login-password', this)" aria-label="Toggle password visibility" title="Show password">
-            <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path>
-              <circle cx="12" cy="12" r="3"></circle>
-            </svg>
-          </button>
+        <!-- Password input -->
+        <div class="form-group">
+          <label for="login-password" class="form-label">Password <span class="required" aria-hidden="true">*</span></label>
+          <div class="input-password-wrap">
+            <input type="password" name="password" id="login-password" class="form-control" placeholder="Enter your password" autocomplete="current-password" required>
+            <button type="button" class="btn-toggle-eye" onclick="togglePasswordVisibility('login-password', this)" aria-label="Toggle password visibility" title="Show password">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </button>
+          </div>
         </div>
 
-        <!-- Options row (Forgot pass) -->
-        <div class="auth-options-row" style="justify-content: space-between; align-items: center;">
-          <span style="font-size: 11.5px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 4px;">
-            <span style="background: rgba(14, 165, 233, 0.15); color: var(--primary-accent); padding: 1px 6px; border-radius: 4px; font-weight: 600; font-size: 10.5px;">Prototype</span>
-            Bypass active
-          </span>
-          <a href="#reset" class="forgot-link" onclick="handleForgotPassword(event); return false;" title="Click to bypass password and log in with email">Forgot password?</a>
+        <!-- Options row (Remember me & Instant Sign In) -->
+        <div class="auth-options-row">
+          <label class="remember-label" for="remember-me">
+            <input type="checkbox" name="remember" id="remember-me" class="remember-checkbox">
+            <span>Remember me</span>
+          </label>
+          <a href="#instant" class="forgot-link" onclick="handleForgotPassword(event); return false;">Instant Sign In</a>
         </div>
 
         <!-- Submit Button -->
-        <button type="submit" class="btn-auth-submit" id="btn-login-submit">Login</button>
+        <button type="submit" class="btn-auth-submit <?= $requestedRole === 'admin' ? 'btn-auth-admin' : ($requestedRole === 'faculty' ? 'btn-auth-faculty' : '') ?>" id="btn-login-submit">
+          <?= $requestedRole === 'admin' ? 'Sign In as Administrator' : ($requestedRole === 'faculty' ? 'Sign In as Faculty' : 'Sign In as Student') ?>
+        </button>
 
-        <!-- Divider -->
-        <div class="auth-divider">
-          <span>or continue with</span>
-        </div>
-
-        <!-- Social Icons matching Image 2 -->
-        <div class="auth-social-row">
-          <!-- Google -->
-          <button type="button" class="btn-social" title="Continue with Google" onclick="alert('Please log in using your registered username or email.');">
-            <svg width="20" height="20" viewBox="0 0 24 24">
-              <path fill="#EA4335" d="M12 5c1.56 0 2.98.54 4.09 1.58l3.07-3.07C17.3 1.77 14.84 1 12 1 7.42 1 3.53 3.61 1.71 7.39l3.66 2.84C6.25 7.37 8.88 5 12 5z"/>
-              <path fill="#4285F4" d="M23.49 12.28c0-.79-.07-1.54-.19-2.28H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58l3.68 2.86c2.14-1.98 3.74-4.89 3.74-8.67z"/>
-              <path fill="#FBBC05" d="M5.37 14.77c-.24-.72-.37-1.49-.37-2.77s.13-1.55.37-2.27L1.71 7.39C.62 9.56 0 11.97 0 14.5s.62 4.94 1.71 7.11l3.66-2.84z"/>
-              <path fill="#34A853" d="M12 23.5c3.24 0 5.96-1.08 7.95-2.92l-3.68-2.86c-1.08.72-2.46 1.15-4.27 1.15-3.12 0-5.75-2.37-6.63-5.23L1.71 16.48C3.53 20.26 7.42 22.87 12 23.5z"/>
-            </svg>
-          </button>
-          <!-- GitHub -->
-          <button type="button" class="btn-social" title="Continue with GitHub" onclick="alert('Please log in using your registered username or email.');">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="#ffffff">
-              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
-            </svg>
-          </button>
-          <!-- Microsoft -->
-          <button type="button" class="btn-social" title="Continue with Microsoft" onclick="alert('Please log in using your registered username or email.');">
-            <svg width="18" height="18" viewBox="0 0 24 24">
-              <path fill="#F25022" d="M1 1h10v10H1z"/>
-              <path fill="#7FBA00" d="M13 1h10v10H13z"/>
-              <path fill="#00A4EF" d="M1 13h10v10H1z"/>
-              <path fill="#FFB900" d="M13 13h10v10H13z"/>
-            </svg>
-          </button>
-        </div>
-
-        <!-- Footer Switch -->
+        <!-- Footer Link -->
         <p class="auth-footer-prompt">
-          Don't have an account? <a href="register.php">Register</a>
+          Don't have an account? 
+          <a href="register.php?role=<?= e($requestedRole) ?>">
+            Register as <?= ucfirst($requestedRole) ?>
+          </a>
         </p>
       </form>
     </div>
   </div>
 
-  <!-- Reset Password / Bypass Login Modal -->
+  <!-- Instant Sign In Modal (Prototype) -->
   <div class="auth-modal-overlay" id="reset-modal" onclick="closeResetModalOnBackdrop(event)">
     <div class="auth-modal-card">
       <div class="auth-modal-header">
-        <h3 class="auth-modal-title" style="display: flex; align-items: center; gap: 8px;">
-          <span>Instant Login</span>
-          <span style="font-size: 11px; font-weight: 600; background: rgba(14, 165, 233, 0.2); color: var(--primary-accent); padding: 2px 8px; border-radius: 6px;">Prototype</span>
-        </h3>
-        <button type="button" class="btn-close-modal" onclick="closeResetModal()">&times;</button>
+        <h3 class="auth-modal-title">Instant <?= ucfirst($requestedRole) ?> Sign In</h3>
+        <button type="button" class="btn-close-modal" onclick="closeResetModal()" aria-label="Close dialog">&times;</button>
       </div>
-      <p class="auth-modal-desc">Prototype Mode: Enter your registered email (or username) to bypass the password check and log in immediately.</p>
+      <p class="auth-modal-desc">
+        Enter your registered Full Name, Email, or 10-digit ID to sign in directly without a password.
+      </p>
 
-      <form action="login.php" method="POST" class="auth-form" id="bypass-login-form">
+      <form action="login.php?role=<?= e($requestedRole) ?>" method="POST" class="auth-form" id="bypass-login-form">
         <input type="hidden" name="action" value="bypass_login">
+        <input type="hidden" name="login_role" value="<?= e($requestedRole) ?>">
 
-        <div class="auth-field-box">
-          <svg class="field-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="2" y="4" width="20" height="16" rx="2"></rect>
-            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
-          </svg>
-          <input type="text" name="bypass_email" id="bypass-input-field" class="auth-input" placeholder="Enter your email or username" required autofocus>
+        <div class="form-group">
+          <label for="bypass-input-field" class="form-label">Identifier <span class="required" aria-hidden="true">*</span></label>
+          <input type="text" name="bypass_email" id="bypass-input-field" class="form-control" placeholder="Full Name, Email, or 10-digit ID" required autofocus>
         </div>
 
-        <button type="submit" class="btn-auth-submit" id="btn-bypass-submit" style="margin-top: 8px;">
-          Log In Using Email &rarr;
+        <button type="submit" class="btn-auth-submit <?= $requestedRole === 'admin' ? 'btn-auth-admin' : ($requestedRole === 'faculty' ? 'btn-auth-faculty' : '') ?>" id="btn-bypass-submit">
+          Sign In Directly
         </button>
       </form>
     </div>
@@ -284,12 +429,12 @@ HTML PART
       if (!input) return;
       if (input.type === 'password') {
         input.type = 'text';
-        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
+        btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
         btn.setAttribute('aria-label', 'Hide password');
         btn.setAttribute('title', 'Hide password');
       } else {
         input.type = 'password';
-        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+        btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
         btn.setAttribute('aria-label', 'Show password');
         btn.setAttribute('title', 'Show password');
       }
@@ -297,35 +442,8 @@ HTML PART
 
     function handleForgotPassword(e) {
       if (e) e.preventDefault();
-      const mainInput = document.querySelector('input[name="login_input"]');
-      const val = mainInput ? mainInput.value.trim() : '';
-
-      if (val) {
-        // If the user already typed their email or username in the login input,
-        // immediately submit bypass login using that email/username!
-        const link = document.querySelector('.forgot-link');
-        if (link) link.textContent = 'Logging in...';
-        document.getElementById('bypass-input-field').value = val;
-        document.getElementById('bypass-login-form').submit();
-      } else {
-        // Otherwise open the Quick Login / Bypass modal so they can enter their email
-        openResetModal();
-      }
-    }
-
-    function openResetModal() {
       const modal = document.getElementById('reset-modal');
-      if (modal) {
-        modal.classList.add('active');
-        const mainInput = document.querySelector('input[name="login_input"]');
-        const bypassInput = document.getElementById('bypass-input-field');
-        if (bypassInput && mainInput && mainInput.value.trim()) {
-          bypassInput.value = mainInput.value.trim();
-        }
-        setTimeout(() => {
-          if (bypassInput) bypassInput.focus();
-        }, 120);
-      }
+      if (modal) modal.classList.add('active');
     }
 
     function closeResetModal() {
@@ -339,29 +457,13 @@ HTML PART
       }
     }
 
-    // Submit animation feedback
     document.getElementById('login-form').addEventListener('submit', function() {
       const btn = document.getElementById('btn-login-submit');
       if (btn) {
-        btn.textContent = 'Logging in...';
+        btn.textContent = 'Verifying credentials...';
         btn.style.opacity = '0.85';
       }
     });
-
-    // Prevent browser password manager from autofilling inputs on page load/refresh
-    <?php if (empty($error)): ?>
-    window.addEventListener('pageshow', function() {
-      const resetFields = () => {
-        const u = document.getElementById('login-input');
-        const p = document.getElementById('login-password');
-        if (u) u.value = '';
-        if (p) p.value = '';
-      };
-      resetFields();
-      setTimeout(resetFields, 60);
-      setTimeout(resetFields, 250);
-    });
-    <?php endif; ?>
   </script>
 </body>
 </html>
