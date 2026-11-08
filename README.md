@@ -11,6 +11,7 @@
 The primary purpose of this project was to gain practical, hands-on experience in building a complete end-to-end dynamic web application from scratch — integrating frontend interfaces, server-side processing, session management, secure user authentication, and relational database management.
 
 ### Key Highlights
+
 - **Interactive Discussions**: Create discussion threads with formatted text and image attachments.
 - **Engaging Community**: Browse the central home feed, reply to ongoing discussions, and react with likes.
 - **Content Management**: Users have full control to edit or delete their own posts and replies.
@@ -23,15 +24,15 @@ The primary purpose of this project was to gain practical, hands-on experience i
 
 The project relies on a clean, dependency-free tech stack with zero heavy external frameworks:
 
-| Layer | Technology | Purpose |
-|---|---|---|
-| **Frontend** | **HTML5** | Semantic structure for pages, forms, buttons, and navigation |
-| | **CSS3** | Responsive layout styling, colors, dark/light themes, typography, and card designs |
-| | **Vanilla JavaScript** | Client-side interactions, modal popups, live image previews, and theme toggling |
-| **Backend** | **PHP** | Server-side logic, routing, request processing, authentication, and database queries |
-| **Database** | **MySQL** | Relational storage for user accounts, posts, images, replies, and likes |
-| **Environment** | **Apache & XAMPP** | Local development environment and web server execution |
-| **DB Management** | **phpMyAdmin** | Database administration, table structuring, and record inspection |
+| Layer             | Technology             | Purpose                                                                              |
+| ----------------- | ---------------------- | ------------------------------------------------------------------------------------ |
+| **Frontend**      | **HTML5**              | Semantic structure for pages, forms, buttons, and navigation                         |
+|                   | **CSS3**               | Responsive layout styling, colors, dark/light themes, typography, and card designs   |
+|                   | **Vanilla JavaScript** | Client-side interactions, modal popups, live image previews, and theme toggling      |
+| **Backend**       | **PHP**                | Server-side logic, routing, request processing, authentication, and database queries |
+| **Database**      | **MySQL**              | Relational storage for user accounts, posts, images, replies, and likes              |
+| **Environment**   | **Apache & XAMPP**     | Local development environment and web server execution                               |
+| **DB Management** | **phpMyAdmin**         | Database administration, table structuring, and record inspection                    |
 
 ---
 
@@ -76,12 +77,12 @@ flowchart TD
     Register --> Login[User Login<br/>Verify credentials with password_hash]
     AuthCheck -- Yes --> Login
     Login --> HomeFeed[Home Feed<br/>Explore ongoing discussions]
-    
+
     HomeFeed --> CreatePost[Create New Post<br/>Text + Image Attachments]
     HomeFeed --> InteractPost[Interact with Posts<br/>Like / Unlike & Threaded Replies]
     HomeFeed --> ManageOwn[Manage Own Content<br/>Edit or Delete Posts & Replies]
     HomeFeed --> ViewProfile[User Profile<br/>View activity, Edit Bio, Avatar, Banner]
-    
+
     HomeFeed --> Logout[Sign Out<br/>Destroy session & redirect]
     Logout --> End([Session Ended])
 ```
@@ -159,6 +160,7 @@ The relational database (`quaddit`) is designed with 3 dedicated authentication 
 ## ✨ Features Implemented
 
 ### 1. Three Separate Registration & Authentication Portals
+
 - **Student Portal**: Student ID (10 numeric digits), Full Name, Email, and Password.
 - **Faculty Portal**: Faculty ID (10 numeric digits), Full Name, Email, and Password.
 - **Admin Portal**: Admin ID (10 numeric digits), Institutional Authorization Key verification, Full Name, Email, and Password.
@@ -166,11 +168,13 @@ The relational database (`quaddit`) is designed with 3 dedicated authentication 
 - Strict portal isolation: accounts registered in one category cannot sign in through another portal and receive clear authorization notices.
 
 ### 2. Group-Based Discussion System
+
 - Admin controls for creating and restricting academic groups.
 - User group discovery, join/leave capabilities, and membership-gated posting.
 - Active vs. Restricted group status controls.
 
 ### 3. Interactive Discussion Feed & Moderation
+
 - Central and group-filtered discussion feeds.
 - Threaded replies, post interactions (likes/unlikes), and view counts.
 - Dedicated Admin dashboard with platform analytics and management controls.
@@ -180,6 +184,7 @@ The relational database (`quaddit`) is designed with 3 dedicated authentication 
 ## 🚀 Getting Started (Local Setup)
 
 ### Prerequisites
+
 - [XAMPP](https://www.apachefriends.org/) (Apache and MySQL modules).
 - A modern web browser.
 
@@ -187,6 +192,7 @@ The relational database (`quaddit`) is designed with 3 dedicated authentication 
 
 1. **Clone or Copy the Project**:
    Place the project folder inside your XAMPP web root directory:
+
    ```
    C:\xampp\htdocs\FORUM-OR-DISCUSSION-BOARD
    ```
@@ -200,20 +206,9 @@ The relational database (`quaddit`) is designed with 3 dedicated authentication 
    - Click on the **Import** tab at the top.
    - Choose the file [`schema.sql`](file:///c:/xampp/htdocs/FORUM-OR-DISCUSSION-BOARD/schema.sql) located in the project root directory.
    - Click **Import** (or **Go**).
-   - phpMyAdmin will automatically drop any old structure and set up the complete `quaddit` database with all 11 tables and initial seed data.
+   - phpMyAdmin will automatically drop any old structure and set up the clean `quaddit` database with all 11 tables ready for registration and group creation.
 
-4. **Default Login Credentials (Ready to use)**:
-   All default accounts use the password: `password123`
-
-   | Portal | Account Type | 10-Digit ID / Email | Password | Role |
-   |---|---|---|---|---|
-   | **Admin** | Administrator | `9000000001` or `admin@quaddit.edu` | `password123` | System Administrator |
-   | **Faculty** | Faculty / Teacher | `5000000001` or `faculty@quaddit.edu` | `password123` | Faculty Member |
-   | **Student** | Student | `1000000001` or `student@quaddit.edu` | `password123` | Undergraduate Student |
-
-   *Institutional Admin Authorization Key for new admin registrations:* `QUAD-ADMIN-2026`
-
-5. **Launch the Application**:
+4. **Launch the Application**:
    Open your browser and visit:
    ```
    http://localhost/FORUM-OR-DISCUSSION-BOARD/
@@ -228,11 +223,10 @@ The relational database (`quaddit`) is designed with 3 dedicated authentication 
 
 **Academic Institution**: Bhawanipur Global Campus, Kolkata  
 **Subject**: PCA 2 — PHP Mini Project (5th Semester)  
-**Project Guide**: Prof. Majid Malik  
+**Project Guide**: Prof. Majid Malik
 
 ---
 
 ## 🎓 Conclusion
 
 Building Quaddit provided practical experience in bridging theoretical knowledge of web development into a working real-world application. Through this project, we strengthened our understanding of core PHP server-side programming, relational data modeling in MySQL, session-based security, and building clean, responsive user interfaces.
-

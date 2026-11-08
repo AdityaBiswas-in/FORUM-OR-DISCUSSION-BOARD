@@ -1892,7 +1892,7 @@ HTML PART starts here
 
                         </a>
 
-                        <div style="font-size: 12px; color: var(--text-muted); margin-top: 3px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                        <div style="font-size: 12px; color: var(--text-muted); margin-top: 3px; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
 
                           <?= e($ag['description'] ?: 'No description provided.') ?>
 
