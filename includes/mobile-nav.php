@@ -143,39 +143,21 @@ $mobileSearchVal = trim($_GET['q'] ?? '');
   <!-- Bottom Navigation Bar (Home, Groups, Search, Profile) -->
 
   <nav class="mobile-bottom-bar" aria-label="Mobile Navigation">
-
-    
-
     <!-- Home Tab -->
-
     <a href="index.php" class="mobile-nav-btn <?= $isHomePage && empty($mobileSearchVal) && empty($_GET['view']) ? 'active' : '' ?>" aria-label="Home">
-
       <div class="mobile-nav-icon-wrap">
-
         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-
           <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
-
         </svg>
-
       </div>
-
       <span class="mobile-nav-label">Home</span>
-
     </a>
 
-
-
     <!-- Groups Tab -->
-
     <a href="index.php?view=groups" class="mobile-nav-btn <?= (isset($_GET['view']) && $_GET['view'] === 'groups') ? 'active' : '' ?>" aria-label="Groups">
-
       <div class="mobile-nav-icon-wrap">
-
         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-
           <circle cx="9" cy="7" r="4"></circle>
 
           <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
