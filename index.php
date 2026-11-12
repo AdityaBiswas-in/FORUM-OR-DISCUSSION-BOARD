@@ -2961,11 +2961,12 @@ HTML PART starts here
 
                 <?php $isExpanded = ($single_post_id === $postId); ?>
 
-                <div class="post-replies-collapse" id="replies-section-<?= $postId ?>" style="display: <?= $isExpanded ? 'block' : 'none' ?>;" onclick="event.stopPropagation()">
+                <div class="post-replies-collapse" id="replies-section-<?= $postId ?>" data-single-post="<?= $isExpanded ? '1' : '0' ?>" style="display: <?= $isExpanded ? 'block' : 'none' ?>;" onclick="event.stopPropagation()">
 
                   
 
                   <!-- Reply Composer Box -->
+                  <div class="reply-composer-wrapper" id="reply-composer-box-<?= $postId ?>" style="display: <?= $isExpanded ? 'none' : 'block' ?>;">
 
                   <?php if ($isPostGroupRestricted && !is_admin()): ?>
 
@@ -3060,6 +3061,8 @@ HTML PART starts here
                   </div>
 
                   <?php endif; ?>
+
+                  </div>
 
 
 
@@ -3862,6 +3865,38 @@ function toggleRepliesSection(postId) {
   const section = document.getElementById('replies-section-' + postId);
 
   if (!section) return;
+
+  if (section.dataset.singlePost === '1') {
+
+    const composerBox = document.getElementById('reply-composer-box-' + postId);
+
+    if (!composerBox) return;
+
+    const isBoxHidden = (window.getComputedStyle(composerBox).display === 'none');
+
+    composerBox.style.display = isBoxHidden ? 'block' : 'none';
+
+    if (isBoxHidden) {
+
+      const textarea = composerBox.querySelector('textarea');
+
+      if (textarea) {
+
+        setTimeout(function() {
+
+          textarea.focus();
+
+          textarea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+        }, 50);
+
+      }
+
+    }
+
+    return;
+
+  }
 
   const currentDisplay = window.getComputedStyle(section).display;
 
