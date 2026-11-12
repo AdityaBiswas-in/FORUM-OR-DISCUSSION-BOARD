@@ -13,6 +13,7 @@ if (!empty($_SESSION['user_id'])) {
         }
     }
 }
+
 $currentUserId = $currentUser ? (int)$currentUser['id'] : 0;
 function time_ago(?string $datetime): string {
     if (!$datetime) return 'just now';
@@ -62,9 +63,6 @@ function render_format_toolbar(string $targetId = '', string $extraClass = ''): 
     </button>
     <button type="button" class="format-btn" data-format="strike" title="Strikethrough">
       <span class="fmt-s">S</span>
-    </button>
-    <button type="button" class="format-btn" data-format="super" title="Superscript">
-      <span class="fmt-sup">X<sup>2</sup></span>
     </button>
     <button type="button" class="format-btn" data-format="heading" title="Heading">
       <span class="fmt-heading">ᴛT</span>
@@ -2574,7 +2572,7 @@ HTML PART starts here
 
                   <button type="button" class="composer-tool-btn" title="Add Photos">
 
-                    <svg viewBox="0 0 24 24" fill="currentColor">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
 
                       <path d="M3 5.5C3 4.119 4.119 3 5.5 3h13C19.881 3 21 4.119 21 5.5v13c0 1.381-1.119 2.5-2.5 2.5h-13C4.119 21 3 19.881 3 18.5v-13zM5.5 5c-.276 0-.5.224-.5.5v9.086l3.293-3.293a1 1 0 0 1 1.414 0l4 4a1 1 0 0 1 0 1.414l-1.293 1.293H18.5c.276 0 .5-.224.5-.5V5.5c0-.276-.224-.5-.5-.5h-13zM15 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/>
 
@@ -2654,7 +2652,7 @@ HTML PART starts here
 
                   <button type="button" class="composer-tool-btn" title="Add Photos">
 
-                    <svg viewBox="0 0 24 24" fill="currentColor">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
 
                       <path d="M3 5.5C3 4.119 4.119 3 5.5 3h13C19.881 3 21 4.119 21 5.5v13c0 1.381-1.119 2.5-2.5 2.5h-13C4.119 21 3 19.881 3 18.5v-13zM5.5 5c-.276 0-.5.224-.5.5v9.086l3.293-3.293a1 1 0 0 1 1.414 0l4 4a1 1 0 0 1 0 1.414l-1.293 1.293H18.5c.276 0 .5-.224.5-.5V5.5c0-.276-.224-.5-.5-.5h-13zM15 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/>
 

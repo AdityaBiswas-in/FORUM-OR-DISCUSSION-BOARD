@@ -556,22 +556,33 @@ img, svg {
 .composer-tools {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 .composer-tool-btn {
   color: var(--primary-blue);
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  display: flex;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s ease;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .composer-tool-btn:hover {
   background-color: var(--primary-blue-light);
+}
+
+.composer-tool-btn svg {
+  width: 19px;
+  height: 19px;
+  display: block;
+  flex-shrink: 0;
 }
 
 .composer-post-btn {
@@ -1569,10 +1580,10 @@ img, svg {
 .x-toolbar-icons {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 
-/* Post Format Toolbar (Bold, Italic, Strike, Super, Heading) */
+/* Post Format Toolbar (Bold, Italic, Strike, Heading) */
 .format-toolbar {
   display: inline-flex;
   align-items: center;
@@ -1585,8 +1596,8 @@ img, svg {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   background: transparent;
   border: none;
@@ -1600,6 +1611,12 @@ img, svg {
 .format-btn:hover {
   background-color: var(--bg-hover);
   color: var(--text-main);
+}
+
+.format-btn.active,
+.format-btn.is-active {
+  background-color: rgba(29, 155, 240, 0.18);
+  color: var(--primary-blue);
 }
 
 .format-btn .fmt-b {
@@ -1625,19 +1642,6 @@ img, svg {
   text-decoration-thickness: 1.5px;
 }
 
-.format-btn .fmt-sup {
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1;
-}
-
-.format-btn .fmt-sup sup {
-  font-size: 9.5px;
-  font-weight: 700;
-  top: -0.45em;
-  position: relative;
-}
-
 .format-btn .fmt-heading {
   font-size: 13.5px;
   font-weight: 700;
@@ -1648,9 +1652,15 @@ img, svg {
 .format-divider {
   display: inline-block;
   width: 1px;
-  height: 18px;
+  height: 16px;
   background: var(--border-color);
-  margin: 0 6px;
+  margin: 0 4px;
+  align-self: center;
+  opacity: 0.6;
+}
+
+.format-toolbar:only-child .format-divider {
+  display: none;
 }
 
 /* Rich Content Editable Editors */
@@ -1704,17 +1714,28 @@ img, svg {
 
 .x-tool-btn {
   color: var(--primary-blue);
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: flex;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s ease;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .x-tool-btn:hover {
   background-color: var(--primary-blue-light);
+}
+
+.x-tool-btn svg {
+  width: 19px;
+  height: 19px;
+  display: block;
+  flex-shrink: 0;
 }
 
 .x-compose-submit-btn {
