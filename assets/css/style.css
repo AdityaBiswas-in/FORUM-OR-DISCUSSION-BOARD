@@ -783,7 +783,8 @@ img, svg {
   background-color: var(--bg-card-hover);
 }
 
-.three-dots-dropdown button.btn-delete:hover {
+.three-dots-dropdown button.btn-delete:hover,
+.three-dots-dropdown a.btn-delete:hover {
   background-color: var(--danger-bg);
   color: var(--danger-red);
 }
@@ -1103,6 +1104,39 @@ img, svg {
 }
 
 /* Reply Items Tree */
+.post-replies-collapse {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color);
+}
+
+.replies-divider-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.replies-divider-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--bg-input);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+}
+
 .replies-section-title {
   font-size: 16px;
   font-weight: 700;
@@ -1113,13 +1147,33 @@ img, svg {
 .replies-tree-list {
   display: flex;
   flex-direction: column;
+  gap: 10px;
 }
 
 .reply-node,
 .reply-thread-item {
   position: relative;
-  border-bottom: 1px solid var(--border-subtle);
-  padding: 14px 16px;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.reply-children-list {
+  margin-top: 10px;
+  padding-left: 14px;
+  border-left: 2px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reply-children-list .reply-thread-item {
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 6px 0 2px 0;
 }
 
 .reply-card {

@@ -72,7 +72,7 @@ function renderReplyNode(array $rep, array $childrenByParent, array $repliesById
 
     ?>
 
-    <div class="reply-thread-item" id="reply-<?= $repId ?>" style="position: relative; margin-bottom: 12px;">
+    <div class="reply-thread-item" id="reply-<?= $repId ?>" style="position: relative;">
 
       <div class="reply-card">
 
@@ -110,41 +110,35 @@ function renderReplyNode(array $rep, array $childrenByParent, array $repliesById
 
 
 
-          <!-- Actions for reply author / admin (Edit, Delete) -->
+          <!-- 3-Dots Actions Menu for reply author / admin (Edit, Delete) -->
 
-          <div style="display: flex; align-items: center; gap: 8px;">
-
-            <?php if ($isRepAuthor && $canModifyReply): ?>
-
-              <button type="button" class="btn-edit-reply" onclick="toggleEditReplyForm(<?= $repId ?>)" style="background: none; border: none; color: var(--primary-blue); font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
-
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-
-                </svg>
-
-                Edit
-
-              </button>
-
-            <?php endif; ?>
-            <?php if (($isRepAuthor && $canModifyReply) || is_admin()): ?>
-              <a href="index.php?action=delete_reply&id=<?= $repId ?>" class="btn-delete-reply" onclick="return confirm('<?= is_admin() && !$isRepAuthor ? 'Admin: Remove this reply?' : 'Delete this reply?' ?>')" style="background: none; border: none; color: var(--danger-red); font-size: 12px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-
+          <?php if (($isRepAuthor && $canModifyReply) || is_admin()): ?>
+          <div class="post-actions-menu" onclick="event.stopPropagation()">
+            <button type="button" class="btn-three-dots" title="More" onclick="togglePostMenu(event, 'reply-menu-<?= $repId ?>')">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M3 12c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm9 2c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm7 0c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/>
+              </svg>
+            </button>
+            <div class="three-dots-dropdown" id="reply-menu-<?= $repId ?>">
+              <?php if ($isRepAuthor && $canModifyReply): ?>
+                <button type="button" onclick="document.getElementById('reply-menu-<?= $repId ?>')?.classList.remove('show'); toggleEditReplyForm(<?= $repId ?>)">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                  </svg>
+                  Edit Reply
+                </button>
+              <?php endif; ?>
+              <a href="index.php?action=delete_reply&id=<?= $repId ?>" class="btn-delete" onclick="return confirm('<?= is_admin() && !$isRepAuthor ? 'Admin: Remove this reply?' : 'Delete this reply?' ?>')" style="color: var(--danger-red);">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="3 6 5 6 21 6"></polyline>
-
                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-
                 </svg>
-
-                <?= is_admin() && !$isRepAuthor ? 'Moderate (Delete)' : 'Delete' ?>
+                <?= is_admin() && !$isRepAuthor ? 'Moderate (Delete)' : 'Delete Reply' ?>
               </a>
-            <?php endif; ?>
+            </div>
           </div>
+          <?php endif; ?>
         </div>
         <!-- Reply Body Text -->
 
@@ -1271,7 +1265,7 @@ if ($current_view !== 'admin' && $current_view !== 'groups') {
 
             WHERE r.post_id IN ($placeholders)
 
-            ORDER BY r.created_at ASC
+            ORDER BY r.created_at DESC
 
         ", $post_ids);
 
@@ -2937,16 +2931,13 @@ HTML PART starts here
 
                   <!-- Reply Button -->
 
+                  <?php $isExpanded = ($single_post_id === $postId); ?>
+
                   <button type="button" class="post-action-btn action-reply" onclick="event.stopPropagation(); toggleRepliesSection(<?= $postId ?>)" title="Replies">
-
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
-
                       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-
                     </svg>
-
                     <span id="reply-count-badge-<?= $postId ?>"><?= count($replies) > 0 ? count($replies) . (count($replies) === 1 ? ' reply' : ' replies') : 'Reply' ?></span>
-
                   </button>
 
                 </div>
@@ -2958,8 +2949,6 @@ HTML PART starts here
                 <!-- INLINE REPLIES & REPLY COMPOSER                      -->
 
                 <!-- ==================================================== -->
-
-                <?php $isExpanded = ($single_post_id === $postId); ?>
 
                 <div class="post-replies-collapse" id="replies-section-<?= $postId ?>" data-single-post="<?= $isExpanded ? '1' : '0' ?>" style="display: <?= $isExpanded ? 'block' : 'none' ?>;" onclick="event.stopPropagation()">
 
@@ -3068,7 +3057,13 @@ HTML PART starts here
 
                   <!-- Existing Replies Thread -->
 
-                  <?php if (!empty($replies)): ?>
+                  <?php
+                    $visibleReplies = $isExpanded
+                      ? $replies
+                      : ($currentUser ? array_values(array_filter($replies, fn($r) => (int)$r['user_id'] === (int)$currentUser['id'])) : []);
+                  ?>
+
+                  <?php if (!empty($visibleReplies)): ?>
 
                     <?php
 
@@ -3080,13 +3075,13 @@ HTML PART starts here
 
 
 
-                      foreach ($replies as $r) {
+                      foreach ($visibleReplies as $r) {
 
                           $repliesById[$r['id']] = $r;
 
                       }
 
-                      foreach ($replies as $r) {
+                      foreach ($visibleReplies as $r) {
 
                           $pId = !empty($r['parent_id']) ? (int)$r['parent_id'] : 0;
 
@@ -3104,6 +3099,11 @@ HTML PART starts here
 
                     ?>
 
+                    <div class="replies-divider-header">
+                      <span><?= $isExpanded ? 'Replies' : 'Your Replies' ?></span>
+                      <span class="replies-divider-count"><?= count($visibleReplies) ?></span>
+                    </div>
+
                     <div class="replies-tree-list">
 
                       <?php foreach ($topLevelReplies as $rep): ?>
@@ -3114,6 +3114,14 @@ HTML PART starts here
 
                     </div>
 
+                  <?php endif; ?>
+
+                  <?php if (!$isExpanded && count($replies) > count($visibleReplies)): ?>
+                    <div style="margin-top: 10px; text-align: center;">
+                      <a href="index.php?group=<?= (int)$post['group_id'] ?>&post=<?= $postId ?>#post-<?= $postId ?>" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--primary-blue); text-decoration: none; padding: 6px 14px; border-radius: 9999px; background: rgba(29, 155, 240, 0.1);">
+                        View all <?= count($replies) ?> <?= count($replies) === 1 ? 'reply' : 'replies' ?> in Discussion →
+                      </a>
+                    </div>
                   <?php endif; ?>
 
                 </div>

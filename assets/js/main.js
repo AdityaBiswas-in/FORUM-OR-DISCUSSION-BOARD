@@ -285,6 +285,22 @@ function confirmDeletePost(id) {
 function toggleRepliesSection(postId) {
   const section = document.getElementById(`replies-section-${postId}`);
   if (!section) return;
+  if (section.dataset.singlePost === '1') {
+    const composerBox = document.getElementById(`reply-composer-box-${postId}`);
+    if (!composerBox) return;
+    const isBoxHidden = window.getComputedStyle(composerBox).display === 'none';
+    composerBox.style.display = isBoxHidden ? 'block' : 'none';
+    if (isBoxHidden) {
+      const textarea = composerBox.querySelector('textarea');
+      if (textarea) {
+        setTimeout(() => {
+          textarea.focus();
+          textarea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 50);
+      }
+    }
+    return;
+  }
   const isHidden = window.getComputedStyle(section).display === 'none';
   section.style.display = isHidden ? 'block' : 'none';
   if (isHidden) {
