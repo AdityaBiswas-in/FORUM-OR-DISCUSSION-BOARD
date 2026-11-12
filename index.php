@@ -1,7 +1,5 @@
 <?php
-
 require_once __DIR__ . '/db.php';
-
 $currentUser = null;
 if (!empty($_SESSION['user_id'])) {
     $currentUser = $conn->execute_query("SELECT id, uid, username, account_type, email, name, avatar, role, bio FROM users WHERE id = ?", [$_SESSION['user_id']])->fetch_assoc();
@@ -55,31 +53,18 @@ function upload_single_image(?array $file): ?string {
 
 
 // Recursively render a reply and its child replies
-
 function renderReplyNode(array $rep, array $childrenByParent, array $repliesById, ?array $currentUser, int $postId, int $depth = 0, bool $isGroupRestricted = false): void {
-
     $isRepAuthor = ($currentUser && (int)$rep['user_id'] === (int)$currentUser['id']);
-
     $canModifyReply = (!$isGroupRestricted || is_admin());
-
     $repId = (int)$rep['id'];
-
     $parentId = !empty($rep['parent_id']) ? (int)$rep['parent_id'] : 0;
-
     $parentAuthor = ($parentId > 0 && isset($repliesById[$parentId])) ? $repliesById[$parentId]['author_username'] : null;
-
     $children = $childrenByParent[$repId] ?? [];
-
     ?>
-
     <div class="reply-thread-item" id="reply-<?= $repId ?>" style="position: relative;">
-
       <div class="reply-card">
-
         <div class="reply-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-
           <div class="reply-author" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-
             <?php if (($rep['author_role'] ?? '') !== 'admin' || is_admin()): ?>
             <a href="profile.php?id=<?= (int)$rep['user_id'] ?>" style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: inherit;">
               <img src="<?= e($rep['author_avatar']) ?>" alt="<?= e($rep['author_name']) ?>" class="reply-avatar" style="width: 24px; height: 24px; border-radius: 50%;">
@@ -97,15 +82,10 @@ function renderReplyNode(array $rep, array $childrenByParent, array $repliesById
                 <a href="profile.php?u=<?= urlencode($parentAuthor) ?>" style="color: var(--primary-blue); font-weight: 600; text-decoration: none;">@<?= e($parentAuthor) ?></a>
               </span>
             <?php endif; ?>
-
             <span class="reply-timestamp" style="font-size: 12px; color: var(--text-dim);">· <?= time_ago($rep['created_at']) ?></span>
-
             <?php if (!empty($rep['updated_at'])): ?>
-
               <span style="font-size: 11px; color: var(--text-dim);">(edited)</span>
-
             <?php endif; ?>
-
           </div>
 
 
