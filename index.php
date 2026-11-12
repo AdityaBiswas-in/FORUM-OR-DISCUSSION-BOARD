@@ -56,9 +56,11 @@ function upload_single_image(?array $file): ?string {
 
 // Recursively render a reply and its child replies
 
-function renderReplyNode(array $rep, array $childrenByParent, array $repliesById, ?array $currentUser, int $postId, int $depth = 0): void {
+function renderReplyNode(array $rep, array $childrenByParent, array $repliesById, ?array $currentUser, int $postId, int $depth = 0, bool $isGroupRestricted = false): void {
 
     $isRepAuthor = ($currentUser && (int)$rep['user_id'] === (int)$currentUser['id']);
+
+    $canModifyReply = (!$isGroupRestricted || is_admin());
 
     $repId = (int)$rep['id'];
 
@@ -112,7 +114,7 @@ function renderReplyNode(array $rep, array $childrenByParent, array $repliesById
 
           <div style="display: flex; align-items: center; gap: 8px;">
 
-            <?php if ($isRepAuthor): ?>
+            <?php if ($isRepAuthor && $canModifyReply): ?>
 
               <button type="button" class="btn-edit-reply" onclick="toggleEditReplyForm(<?= $repId ?>)" style="background: none; border: none; color: var(--primary-blue); font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
 
@@ -129,7 +131,7 @@ function renderReplyNode(array $rep, array $childrenByParent, array $repliesById
               </button>
 
             <?php endif; ?>
-            <?php if ($isRepAuthor || is_admin()): ?>
+            <?php if (($isRepAuthor && $canModifyReply) || is_admin()): ?>
               <a href="index.php?action=delete_reply&id=<?= $repId ?>" class="btn-delete-reply" onclick="return confirm('<?= is_admin() && !$isRepAuthor ? 'Admin: Remove this reply?' : 'Delete this reply?' ?>')" style="background: none; border: none; color: var(--danger-red); font-size: 12px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 
@@ -152,7 +154,7 @@ function renderReplyNode(array $rep, array $childrenByParent, array $repliesById
 
         <!-- Inline Reply Edit Form -->
 
-        <?php if ($isRepAuthor): ?>
+        <?php if ($isRepAuthor && $canModifyReply): ?>
 
           <form action="index.php" method="POST" id="reply-edit-form-<?= $repId ?>" style="display: none; margin-bottom: 10px;">
 
@@ -192,6 +194,7 @@ function renderReplyNode(array $rep, array $childrenByParent, array $repliesById
 
         <!-- Nested Reply Action Trigger -->
 
+        <?php if ($canModifyReply): ?>
         <div class="reply-actions-bar" style="margin-top: 6px;">
 
           <button type="button" class="btn-nested-reply" onclick="<?= $currentUser ? "toggleNestedComposer($repId)" : "window.location.href='register.php'" ?>" style="background: none; border: none; color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
@@ -249,6 +252,7 @@ function renderReplyNode(array $rep, array $childrenByParent, array $repliesById
           </form>
 
         </div>
+        <?php endif; ?>
 
       </div>
 
@@ -262,7 +266,7 @@ function renderReplyNode(array $rep, array $childrenByParent, array $repliesById
 
           <?php foreach ($children as $child): ?>
 
-            <?php renderReplyNode($child, $childrenByParent, $repliesById, $currentUser, $postId, $depth + 1); ?>
+            <?php renderReplyNode($child, $childrenByParent, $repliesById, $currentUser, $postId, $depth + 1, $isGroupRestricted); ?>
 
           <?php endforeach; ?>
 
@@ -582,7 +586,7 @@ if ($action === 'create_post') {
 
 
 
-// Edit Post (Owner only)
+// Edit Post (Owner only; blocked in restricted groups for non-admins)
 
 if ($action === 'edit_post') {
 
@@ -592,9 +596,18 @@ if ($action === 'edit_post') {
 
     $content = trim($_POST['content'] ?? '');
 
-    $post = $conn->execute_query("SELECT id, group_id, user_id FROM posts WHERE id = ?", [$postId])->fetch_assoc();
+    $post = $conn->execute_query(
+        "SELECT p.id, p.group_id, p.user_id, g.status AS group_status
+         FROM posts p
+         JOIN groups g ON p.group_id = g.id
+         WHERE p.id = ?",
+        [$postId]
+    )->fetch_assoc();
 
-
+    if ($post && $post['group_status'] === 'restricted' && !is_admin()) {
+        header("Location: index.php?group={$post['group_id']}&post=$postId&error=group_restricted");
+        exit;
+    }
 
     if ($post && (int)$post['user_id'] === (int)$currentUser['id'] && $title !== '' && $content !== '') {
 
@@ -630,13 +643,24 @@ if ($action === 'edit_post') {
 
 
 
-// Delete Post (Owner OR Admin)
+// Delete Post (Owner in active group OR Admin)
 
 if ($action === 'delete_post') {
 
     $postId = (int)($_REQUEST['id'] ?? $_POST['post_id'] ?? 0);
 
-    $post = $conn->execute_query("SELECT id, group_id, user_id FROM posts WHERE id = ?", [$postId])->fetch_assoc();
+    $post = $conn->execute_query(
+        "SELECT p.id, p.group_id, p.user_id, g.status AS group_status
+         FROM posts p
+         JOIN groups g ON p.group_id = g.id
+         WHERE p.id = ?",
+        [$postId]
+    )->fetch_assoc();
+
+    if ($post && $post['group_status'] === 'restricted' && !is_admin()) {
+        header("Location: index.php?group={$post['group_id']}&post=$postId&error=group_restricted");
+        exit;
+    }
 
     if ($post && ((int)$post['user_id'] === (int)$currentUser['id'] || is_admin())) {
 
@@ -666,11 +690,29 @@ if ($action === 'delete_post') {
 
 
 
-// Create Reply
+// Create Reply (Blocked in restricted groups for non-admins)
 
 if ($action === 'create_reply') {
 
     $postId   = (int)($_POST['post_id'] ?? 0);
+
+    $postRow = $conn->execute_query(
+        "SELECT p.group_id, g.status AS group_status
+         FROM posts p
+         JOIN groups g ON p.group_id = g.id
+         WHERE p.id = ?",
+        [$postId]
+    )->fetch_assoc();
+
+    if (!$postRow) {
+        header("Location: index.php?error=post_not_found");
+        exit;
+    }
+
+    if ($postRow['group_status'] === 'restricted' && !is_admin()) {
+        header("Location: index.php?group={$postRow['group_id']}&post=$postId&error=group_restricted");
+        exit;
+    }
 
     $parentId = !empty($_POST['parent_id']) ? (int)$_POST['parent_id'] : null;
 
@@ -692,8 +734,6 @@ if ($action === 'create_reply') {
 
         $newRepId = (int)$conn->insert_id;
 
-        $postRow = $conn->execute_query("SELECT group_id FROM posts WHERE id = ?", [$postId])->fetch_assoc();
-
         $gParam = !empty($postRow['group_id']) ? "group={$postRow['group_id']}&" : "";
 
         header("Location: index.php?{$gParam}post=$postId#reply-$newRepId");
@@ -710,7 +750,7 @@ if ($action === 'create_reply') {
 
 
 
-// Edit Reply (Owner only)
+// Edit Reply (Owner only; blocked in restricted groups for non-admins)
 
 if ($action === 'edit_reply') {
 
@@ -718,15 +758,25 @@ if ($action === 'edit_reply') {
 
     $content = trim($_POST['content'] ?? '');
 
-    $reply = $conn->execute_query("SELECT post_id FROM replies WHERE id = ? AND user_id = ?", [$replyId, $currentUser['id']])->fetch_assoc();
+    $reply = $conn->execute_query(
+        "SELECT r.post_id, r.user_id, p.group_id, g.status AS group_status
+         FROM replies r
+         JOIN posts p ON r.post_id = p.id
+         JOIN groups g ON p.group_id = g.id
+         WHERE r.id = ?",
+        [$replyId]
+    )->fetch_assoc();
 
-    if ($reply && $content !== '') {
+    if ($reply && $reply['group_status'] === 'restricted' && !is_admin()) {
+        header("Location: index.php?group={$reply['group_id']}&post={$reply['post_id']}&error=group_restricted");
+        exit;
+    }
+
+    if ($reply && (int)$reply['user_id'] === (int)$currentUser['id'] && $content !== '') {
 
         $conn->execute_query("UPDATE replies SET content = ?, updated_at = NOW() WHERE id = ?", [$content, $replyId]);
 
-        $postRow = $conn->execute_query("SELECT group_id FROM posts WHERE id = ?", [$reply['post_id']])->fetch_assoc();
-
-        $gParam = !empty($postRow['group_id']) ? "group={$postRow['group_id']}&" : "";
+        $gParam = !empty($reply['group_id']) ? "group={$reply['group_id']}&" : "";
 
         header("Location: index.php?{$gParam}post={$reply['post_id']}#reply-$replyId");
 
@@ -742,13 +792,25 @@ if ($action === 'edit_reply') {
 
 
 
-// Delete Reply (Owner OR Admin)
+// Delete Reply (Owner in active group OR Admin)
 
 if ($action === 'delete_reply') {
 
     $replyId = (int)($_REQUEST['id'] ?? 0);
 
-    $reply = $conn->execute_query("SELECT post_id, user_id, image_url FROM replies WHERE id = ?", [$replyId])->fetch_assoc();
+    $reply = $conn->execute_query(
+        "SELECT r.post_id, r.user_id, r.image_url, p.group_id, g.status AS group_status
+         FROM replies r
+         JOIN posts p ON r.post_id = p.id
+         JOIN groups g ON p.group_id = g.id
+         WHERE r.id = ?",
+        [$replyId]
+    )->fetch_assoc();
+
+    if ($reply && $reply['group_status'] === 'restricted' && !is_admin()) {
+        header("Location: index.php?group={$reply['group_id']}&post={$reply['post_id']}&error=group_restricted");
+        exit;
+    }
 
     if ($reply && ((int)$reply['user_id'] === (int)$currentUser['id'] || is_admin())) {
 
@@ -760,9 +822,7 @@ if ($action === 'delete_reply') {
 
         $conn->execute_query("DELETE FROM replies WHERE id = ?", [$replyId]);
 
-        $postRow = $conn->execute_query("SELECT group_id FROM posts WHERE id = ?", [$reply['post_id']])->fetch_assoc();
-
-        $gParam = !empty($postRow['group_id']) ? "group={$postRow['group_id']}&" : "";
+        $gParam = !empty($reply['group_id']) ? "group={$reply['group_id']}&" : "";
 
         header("Location: index.php?{$gParam}post={$reply['post_id']}");
 
@@ -771,54 +831,6 @@ if ($action === 'delete_reply') {
     }
 
     header("Location: index.php");
-
-    exit;
-
-}
-
-
-
-// Toggle Like
-
-if ($action === 'toggle_like') {
-
-    $postId = (int)($_REQUEST['post_id'] ?? 0);
-
-    $userId = $currentUser['id'];
-
-    $existing = $conn->execute_query("SELECT id FROM likes WHERE user_id = ? AND post_id = ? AND reply_id IS NULL", [$userId, $postId])->fetch_assoc();
-
-
-
-    if ($existing) {
-
-        $conn->execute_query("DELETE FROM likes WHERE id = ?", [$existing['id']]);
-
-        $liked = false;
-
-    } else {
-
-        $conn->execute_query("INSERT INTO likes (user_id, post_id, created_at) VALUES (?, ?, NOW())", [$userId, $postId]);
-
-        $liked = true;
-
-    }
-
-
-
-    $count = (int)$conn->execute_query("SELECT COUNT(*) FROM likes WHERE post_id = ? AND reply_id IS NULL", [$postId])->fetch_row()[0];
-
-
-
-    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
-
-        echo json_encode(['success' => true, 'liked' => $liked, 'count' => $count]);
-
-        exit;
-
-    }
-
-    header("Location: index.php#post-$postId");
 
     exit;
 
@@ -860,7 +872,7 @@ if (!empty($userJoinedGroupIds)) {
 
     $userJoinedGroups = $conn->execute_query(
 
-        "SELECT id, name, status, image_url FROM groups WHERE id IN ($placeholders) AND status = 'active' ORDER BY name ASC",
+        "SELECT id, name, description, status, image_url, (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = groups.id) as member_count FROM groups WHERE id IN ($placeholders) AND status = 'active' ORDER BY name ASC",
 
         $userJoinedGroupIds
 
@@ -1026,15 +1038,11 @@ if ($current_view !== 'admin' && $current_view !== 'groups') {
 
     $sql = "
 
-        SELECT p.*, g.name as group_name, g.status as group_status,
+        SELECT p.*, g.name as group_name, g.image_url as group_image, g.status as group_status,
 
                u.name as author_name, u.username as author_username, u.avatar as author_avatar, u.role as author_role,
 
-               (SELECT COUNT(*) FROM replies r WHERE r.post_id = p.id) as reply_count,
-
-               (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id AND l.reply_id IS NULL) as like_count,
-
-               (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id AND l.user_id = ?) as is_liked
+               (SELECT COUNT(*) FROM replies r WHERE r.post_id = p.id) as reply_count
 
         FROM posts p
 
@@ -1044,7 +1052,7 @@ if ($current_view !== 'admin' && $current_view !== 'groups') {
 
     ";
 
-    $params = [$currentUserId];
+    $params = [];
 
 
 
@@ -1796,11 +1804,33 @@ HTML PART starts here
 
             <div class="admin-toolbar">
               <input type="search" id="admin-groups-search" class="admin-search-input" placeholder="Search groups by name..." aria-label="Search groups by name">
-              <select id="admin-groups-status-filter" class="admin-filter-select" aria-label="Filter groups by status">
-                <option value="all">All Statuses</option>
-                <option value="active">Active Only</option>
-                <option value="restricted">Restricted Only</option>
-              </select>
+              <div class="admin-status-dropdown" id="admin-status-dropdown">
+                <input type="hidden" id="admin-groups-status-filter" value="all">
+                <button type="button" class="admin-status-trigger" id="admin-status-trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="Filter groups by status">
+                  <span class="admin-status-dot dot-all" id="admin-status-trigger-dot"></span>
+                  <span class="admin-status-label" id="admin-status-trigger-label">All Statuses</span>
+                  <svg class="admin-status-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </button>
+                <div class="admin-status-menu" id="admin-status-menu" role="listbox" aria-label="Group status filter">
+                  <button type="button" class="admin-status-option active" role="option" aria-selected="true" data-value="all" data-label="All Statuses" data-dot="dot-all">
+                    <span class="admin-status-dot dot-all"></span>
+                    <span class="admin-status-option-text">All Statuses</span>
+                    <svg class="admin-status-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </button>
+                  <button type="button" class="admin-status-option" role="option" aria-selected="false" data-value="active" data-label="Active Only" data-dot="dot-active">
+                    <span class="admin-status-dot dot-active"></span>
+                    <span class="admin-status-option-text">Active Only</span>
+                    <svg class="admin-status-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </button>
+                  <button type="button" class="admin-status-option" role="option" aria-selected="false" data-value="restricted" data-label="Restricted Only" data-dot="dot-restricted">
+                    <span class="admin-status-dot dot-restricted"></span>
+                    <span class="admin-status-option-text">Restricted Only</span>
+                    <svg class="admin-status-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </button>
+                </div>
+              </div>
               <button type="button" class="btn-admin-action" onclick="openCreateGroupModal()" title="Create a new discussion group">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                   <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -2029,64 +2059,44 @@ HTML PART starts here
 
               <div class="group-card">
 
-                <div>
+                <?php if ($isRestricted): ?>
+                  <span class="group-status-badge status-restricted">Restricted</span>
+                <?php else: ?>
+                  <span class="group-status-badge status-active">Active</span>
+                <?php endif; ?>
 
-                  <div class="group-card-top">
+                <div class="group-card-body">
 
-                    <div class="group-card-icon">
+                  <a href="index.php?group=<?= (int)$g['id'] ?>" class="group-card-icon" aria-label="<?= e($g['name']) ?>">
 
-                      <?php if (!empty($g['image_url'])): ?>
+                    <?php if (!empty($g['image_url'])): ?>
 
-                        <img src="<?= e($g['image_url']) ?>" alt="<?= e($g['name']) ?>" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">
+                      <img src="<?= e($g['image_url']) ?>" alt="<?= e($g['name']) ?>">
 
-                      <?php else: ?>
+                    <?php else: ?>
 
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                          <circle cx="9" cy="7" r="4"></circle>
-                          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                        </svg>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                      </svg>
 
-                      <?php endif; ?>
+                    <?php endif; ?>
 
-                    </div>
+                  </a>
 
-                    <div style="flex: 1; min-width: 0;">
+                  <a href="index.php?group=<?= (int)$g['id'] ?>" class="group-card-title" title="<?= e($g['name']) ?>">
 
-                      <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
+                    <?= e($g['name']) ?>
 
-                        <a href="index.php?group=<?= (int)$g['id'] ?>" class="group-card-title">
-
-                          <?= e($g['name']) ?>
-
-                        </a>
-
-                        <?php if ($isRestricted): ?>
-
-                          <span class="group-status-badge status-restricted" style="font-size: 10px; margin-top: 2px;">Restricted</span>
-
-                        <?php else: ?>
-
-                          <span class="group-status-badge status-active" style="font-size: 10px; margin-top: 2px;">Active</span>
-
-                        <?php endif; ?>
-
-                      </div>
-
-                    </div>
-
-                  </div>
-
-
+                  </a>
 
                   <p class="group-card-desc">
 
                     <?= e($g['description'] ?: 'Academic discussions and peer collaboration.') ?>
 
                   </p>
-
-
 
                   <div class="group-card-meta">
 
@@ -2100,39 +2110,31 @@ HTML PART starts here
 
                 </div>
 
-
-
                 <div class="group-card-actions">
 
-                  <a href="index.php?group=<?= (int)$g['id'] ?>" class="btn-view-group">
+                  <a href="index.php?group=<?= (int)$g['id'] ?>" class="btn-view-group" title="View Discussions">
 
-                    <span>View Discussions</span> &rarr;
+                    <span>View Discussions</span>
 
                   </a>
 
+                  <?php if ($isMem): ?>
 
+                    <a href="index.php?action=leave_group&group_id=<?= (int)$g['id'] ?>&redirect=<?= urlencode('index.php?view=groups') ?>" class="btn-leave-group" onclick="return confirm('Leave this group?')">
 
-                  <div>
+                      Leave
 
-                    <?php if ($isMem): ?>
+                    </a>
 
-                      <a href="index.php?action=leave_group&group_id=<?= (int)$g['id'] ?>&redirect=<?= urlencode('index.php?view=groups') ?>" class="btn-leave-group" style="font-size: 12px; padding: 6px 12px;" onclick="return confirm('Leave this group?')">
+                  <?php else: ?>
 
-                        Leave
+                    <a href="index.php?action=join_group&group_id=<?= (int)$g['id'] ?>&redirect=<?= urlencode('index.php?view=groups') ?>" class="btn-join-group">
 
-                      </a>
+                      Join
 
-                    <?php else: ?>
+                    </a>
 
-                      <a href="index.php?action=join_group&group_id=<?= (int)$g['id'] ?>&redirect=<?= urlencode('index.php?view=groups') ?>" class="btn-join-group" style="font-size: 12px; padding: 6px 14px;">
-
-                        + Join
-
-                      </a>
-
-                    <?php endif; ?>
-
-                  </div>
+                  <?php endif; ?>
 
                 </div>
 
@@ -2181,11 +2183,11 @@ HTML PART starts here
 
         <!-- Single Discussion View Top Bar -->
 
-        <div class="single-discussion-header" style="margin-bottom: 18px; display: flex; align-items: center; justify-content: space-between; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
+        <div class="single-discussion-header">
 
-          <a href="<?= $selected_group_id > 0 ? 'index.php?group=' . $selected_group_id : 'index.php' ?>" style="display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: var(--primary-blue); text-decoration: none; padding: 6px 14px; border-radius: 9999px; background: rgba(37, 99, 235, 0.1);">
+          <a href="<?= $selected_group_id > 0 ? 'index.php?group=' . $selected_group_id : 'index.php' ?>" class="btn-back-discussion">
 
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
 
               <line x1="19" y1="12" x2="5" y2="12"></line>
 
@@ -2197,7 +2199,7 @@ HTML PART starts here
 
           </a>
 
-          <span style="font-size: 13px; font-weight: 600; color: var(--text-dim);">Discussion View</span>
+          <span class="single-discussion-label">Discussion</span>
 
         </div>
 
@@ -2574,171 +2576,132 @@ HTML PART starts here
 
             ?>
 
-            <article class="post-card" id="post-<?= $postId ?>" data-post-id="<?= $postId ?>" onclick="handlePostCardClick(event, <?= $postId ?>, <?= (int)$post['group_id'] ?>)" style="cursor: pointer;">
-
-              <div class="post-avatar-col">
-                <?php $canViewAuthorProfile = (($post['author_role'] ?? '') !== 'admin' || is_admin()); ?>
-                <?php if ($canViewAuthorProfile): ?>
-                <a href="profile.php?id=<?= (int)$post['user_id'] ?>" onclick="event.stopPropagation()">
-                  <img src="<?= e($post['author_avatar']) ?>" alt="<?= e($post['author_name']) ?>" class="author-avatar">
-                </a>
-                <?php else: ?>
-                <span>
-                  <img src="<?= e($post['author_avatar']) ?>" alt="<?= e($post['author_name']) ?>" class="author-avatar">
-                </span>
-                <?php endif; ?>
-              </div>
+            <?php
+              $isGroupFeed = ($selected_group_id > 0);
+              $canViewAuthorProfile = (($post['author_role'] ?? '') !== 'admin' || is_admin());
+              $isPostGroupRestricted = (($post['group_status'] ?? 'active') === 'restricted');
+              $canModifyPost = (!$isPostGroupRestricted || is_admin());
+            ?>
+            <article class="post-card post-card-reddit" id="post-<?= $postId ?>" data-post-id="<?= $postId ?>" onclick="handlePostCardClick(event, <?= $postId ?>, <?= (int)$post['group_id'] ?>)" style="cursor: pointer;">
 
               <div class="post-main-col">
 
-                <!-- Post Header: Author, Group badge, Timestamp, 3-dots -->
-
-                <div class="post-header">
-
-                  <div class="post-author-meta">
-                    <?php if ($canViewAuthorProfile): ?>
-                    <a href="profile.php?id=<?= (int)$post['user_id'] ?>" onclick="event.stopPropagation()" style="color: inherit; text-decoration: none; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">
-                    <?php else: ?>
-                    <span style="color: inherit; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">
-                    <?php endif; ?>
-
-                      <span class="author-name"><?= e($post['author_name']) ?></span>
-
-                      <svg class="verified-badge" viewBox="0 0 24 24" width="18" height="18" fill="#1d9bf0" style="display: inline-block; vertical-align: middle;">
-
-                        <path d="M22.5 12.5c0-1.58-.875-2.95-2.148-3.6.154-.435.238-.905.238-1.4 0-2.21-1.79-4-4-4-.495 0-.965.084-1.4.238C14.55 2.475 13.18 1.6 11.6 1.6c-1.58 0-2.95.875-3.6 2.148-.435-.154-.905-.238-1.4-.238-2.21 0-4 1.79-4 4 0 .495.084.965.238 1.4C1.575 10.45.7 11.82.7 13.4c0 1.58.875 2.95 2.148 3.6-.154.435-.238.905-.238 1.4 0 2.21 1.79 4 4 4 .495 0 .965-.084 1.4-.238.65 1.273 2.02 2.148 3.6 2.148 1.58 0 2.95-.875 3.6-2.148.435.154.905.238 1.4.238 2.21 0 4-1.79 4-4 0-.495-.084-.965-.238-1.4 1.273-.65 2.148-2.02 2.148-3.6zm-12.87 4.16l-3.29-3.29 1.41-1.41 1.88 1.88 5.18-5.18 1.41 1.41-6.59 6.59z"/>
-
-                      </svg>
-
-                      <span class="user-handle">@<?= e($post['author_username']) ?></span>
-
-                    <?php if ($canViewAuthorProfile): ?>
+                <?php if (!$isGroupFeed): ?>
+                  <!-- Homepage / Feed: Group Name (Row 1) -> Username -> Timestamp (Row 2) -->
+                  <div class="post-header post-header-community-row">
+                    <a href="index.php?group=<?= (int)$post['group_id'] ?>" class="post-community-link" onclick="event.stopPropagation()" title="View <?= e($post['group_name']) ?>">
+                      <?php if (!empty($post['group_image'])): ?>
+                        <img src="<?= e($post['group_image']) ?>" alt="<?= e($post['group_name']) ?>" class="post-community-avatar">
+                      <?php else: ?>
+                        <span class="post-community-avatar-fallback" aria-hidden="true">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                          </svg>
+                        </span>
+                      <?php endif; ?>
+                      <span class="post-community-name"><?= e($post['group_name']) ?></span>
                     </a>
-                    <?php else: ?>
-                    </span>
-                    <?php endif; ?>
-
-                    <span class="post-dot">·</span>
-
-
-
-                    <!-- Clickable Group Indicator -->
-
-                    <a href="index.php?group=<?= (int)$post['group_id'] ?>" class="post-group-badge" onclick="event.stopPropagation()" title="View <?= e($post['group_name']) ?>">
-
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-
-                        <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
-
-                      </svg>
-
-                      <span><?= e($post['group_name']) ?></span>
-
-                    </a>
-
-
-
-                    <span class="post-dot">·</span>
-
-                    <span class="post-timestamp"><?= time_ago($post['created_at']) ?></span>
-
-                    <?php if (!empty($post['updated_at'])): ?>
-
-                      <span style="font-size: 11.5px; color: var(--text-dim); margin-left: 4px;">(edited)</span>
-
-                    <?php endif; ?>
-
-                  </div>
-
-
-
-                  <div class="post-header-right">
-
-                    <!-- 3-Dots Action Menu (Author or Admin) -->
-
-                    <?php if ($isAuthor || is_admin()): ?>
-
-                    <div class="post-actions-menu" onclick="event.stopPropagation()">
-
-                      <button type="button" class="btn-three-dots" title="More" onclick="togglePostMenu(event, 'post-menu-<?= $postId ?>')">
-
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-
-                          <path d="M3 12c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm9 2c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm7 0c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/>
-
-                        </svg>
-
-                      </button>
-
-                      <div class="three-dots-dropdown" id="post-menu-<?= $postId ?>">
-
-                        <?php if ($isAuthor): ?>
-
-                          <button type="button" 
-
-                                  data-id="<?= $postId ?>" 
-
-                                  data-title="<?= e($post['title']) ?>" 
-
-                                  data-content="<?= e($post['content']) ?>" 
-
-                                  data-images='<?= htmlspecialchars(json_encode($postImagesData[$postId] ?? []), ENT_QUOTES, 'UTF-8') ?>'
-
-                                  onclick="openEditPostModal(this)">
-
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-
-                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-
-                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-
-                            </svg>
-
-                            Edit Discussion
-
-                          </button>
-
-                          <button type="button" class="btn-delete" onclick="confirmDeletePost(<?= $postId ?>)">
-
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-
-                              <polyline points="3 6 5 6 21 6"></polyline>
-
-                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-
-                            </svg>
-
-                            Delete Discussion
-
-                          </button>
-
-                        <?php else: ?>
-
-                          <!-- Admin Moderation Button -->
-
-                          <button type="button" class="btn-delete" onclick="confirmDeletePost(<?= $postId ?>)" style="color: var(--danger-red);">
-
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-
-                              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
-
-                            </svg>
-
-                            Moderate (Delete)
-
-                          </button>
-
-                        <?php endif; ?>
-
-                      </div>
-
+                <?php else: ?>
+                  <!-- Inside Individual Group Page: Username -> Timestamp (No repeated Group Name) -->
+                  <div class="post-header post-header-group-context">
+                    <div class="post-author-meta">
+                      <?php if ($canViewAuthorProfile): ?>
+                        <a href="profile.php?id=<?= (int)$post['user_id'] ?>" class="post-group-author-link" onclick="event.stopPropagation()">
+                      <?php else: ?>
+                        <span class="post-group-author-link">
+                      <?php endif; ?>
+                          <img src="<?= e($post['author_avatar']) ?>" alt="<?= e($post['author_name']) ?>" class="post-group-author-avatar">
+                          <span class="author-name"><?= e($post['author_name']) ?></span>
+                          <svg class="verified-badge" viewBox="0 0 24 24" width="16" height="16" fill="#1d9bf0" style="display: inline-block; vertical-align: middle;">
+                            <path d="M22.5 12.5c0-1.58-.875-2.95-2.148-3.6.154-.435.238-.905.238-1.4 0-2.21-1.79-4-4-4-.495 0-.965.084-1.4.238C14.55 2.475 13.18 1.6 11.6 1.6c-1.58 0-2.95.875-3.6 2.148-.435-.154-.905-.238-1.4-.238-2.21 0-4 1.79-4 4 0 .495.084.965.238 1.4C1.575 10.45.7 11.82.7 13.4c0 1.58.875 2.95 2.148 3.6-.154.435-.238.905-.238 1.4 0 2.21 1.79 4 4 4 .495 0 .965-.084 1.4-.238.65 1.273 2.02 2.148 3.6 2.148 1.58 0 2.95-.875 3.6-2.148.435.154.905.238 1.4.238 2.21 0 4-1.79 4-4 0-.495-.084-.965-.238-1.4 1.273-.65 2.148-2.02 2.148-3.6zm-12.87 4.16l-3.29-3.29 1.41-1.41 1.88 1.88 5.18-5.18 1.41 1.41-6.59 6.59z"/>
+                          </svg>
+                          <span class="user-handle">@<?= e($post['author_username']) ?></span>
+                      <?php if ($canViewAuthorProfile): ?>
+                        </a>
+                      <?php else: ?>
+                        </span>
+                      <?php endif; ?>
+                      <span class="post-dot">·</span>
+                      <span class="post-timestamp"><?= time_ago($post['created_at']) ?></span>
+                      <?php if (!empty($post['updated_at'])): ?>
+                        <span class="post-edited-tag">(edited)</span>
+                      <?php endif; ?>
                     </div>
+                <?php endif; ?>
 
-                    <?php endif; ?>
-
+                    <div class="post-header-right">
+                      <!-- 3-Dots Action Menu (Author in active group or Admin) -->
+                      <?php if (($isAuthor && $canModifyPost) || is_admin()): ?>
+                      <div class="post-actions-menu" onclick="event.stopPropagation()">
+                        <button type="button" class="btn-three-dots" title="More" onclick="togglePostMenu(event, 'post-menu-<?= $postId ?>')">
+                          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                            <path d="M3 12c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm9 2c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm7 0c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z"/>
+                          </svg>
+                        </button>
+                        <div class="three-dots-dropdown" id="post-menu-<?= $postId ?>">
+                          <?php if ($isAuthor && $canModifyPost): ?>
+                            <button type="button" 
+                                    data-id="<?= $postId ?>" 
+                                    data-title="<?= e($post['title']) ?>" 
+                                    data-content="<?= e($post['content']) ?>" 
+                                    data-images='<?= htmlspecialchars(json_encode($postImagesData[$postId] ?? []), ENT_QUOTES, 'UTF-8') ?>'
+                                    onclick="openEditPostModal(this)">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                              </svg>
+                              Edit Discussion
+                            </button>
+                            <button type="button" class="btn-delete" onclick="confirmDeletePost(<?= $postId ?>)">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                              </svg>
+                              Delete Discussion
+                            </button>
+                          <?php else: ?>
+                            <!-- Admin Moderation Button -->
+                            <button type="button" class="btn-delete" onclick="confirmDeletePost(<?= $postId ?>)" style="color: var(--danger-red);">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+                              </svg>
+                              Moderate (Delete)
+                            </button>
+                          <?php endif; ?>
+                        </div>
+                      </div>
+                      <?php endif; ?>
+                    </div>
                   </div>
 
-                </div>
+                <?php if (!$isGroupFeed): ?>
+                  <div class="post-header-author-row">
+                    <?php if ($canViewAuthorProfile): ?>
+                      <a href="profile.php?id=<?= (int)$post['user_id'] ?>" class="post-inline-author-link" onclick="event.stopPropagation()">
+                    <?php else: ?>
+                      <span class="post-inline-author-link">
+                    <?php endif; ?>
+                        <img src="<?= e($post['author_avatar']) ?>" alt="<?= e($post['author_name']) ?>" class="post-inline-avatar">
+                        <span class="author-name-inline"><?= e($post['author_name']) ?></span>
+                        <svg class="verified-badge" viewBox="0 0 24 24" width="14" height="14" fill="#1d9bf0" style="display: inline-block; vertical-align: middle;">
+                          <path d="M22.5 12.5c0-1.58-.875-2.95-2.148-3.6.154-.435.238-.905.238-1.4 0-2.21-1.79-4-4-4-.495 0-.965.084-1.4.238C14.55 2.475 13.18 1.6 11.6 1.6c-1.58 0-2.95.875-3.6 2.148-.435-.154-.905-.238-1.4-.238-2.21 0-4 1.79-4 4 0 .495.084.965.238 1.4C1.575 10.45.7 11.82.7 13.4c0 1.58.875 2.95 2.148 3.6-.154.435-.238.905-.238 1.4 0 2.21 1.79 4 4 4 .495 0 .965-.084 1.4-.238.65 1.273 2.02 2.148 3.6 2.148 1.58 0 2.95-.875 3.6-2.148.435.154.905.238 1.4.238 2.21 0 4-1.79 4-4 0-.495-.084-.965-.238-1.4 1.273-.65 2.148-2.02 2.148-3.6zm-12.87 4.16l-3.29-3.29 1.41-1.41 1.88 1.88 5.18-5.18 1.41 1.41-6.59 6.59z"/>
+                        </svg>
+                        <span class="user-handle-inline">@<?= e($post['author_username']) ?></span>
+                    <?php if ($canViewAuthorProfile): ?>
+                      </a>
+                    <?php else: ?>
+                      </span>
+                    <?php endif; ?>
+                    <span class="post-dot">·</span>
+                    <span class="post-timestamp"><?= time_ago($post['created_at']) ?></span>
+                    <?php if (!empty($post['updated_at'])): ?>
+                      <span class="post-edited-tag">(edited)</span>
+                    <?php endif; ?>
+                  </div>
+                <?php endif; ?>
 
 
 
@@ -2802,22 +2765,6 @@ HTML PART starts here
 
                   </button>
 
-
-
-                  <!-- Like Button -->
-
-                  <button type="button" class="post-action-btn action-like <?= $post['is_liked'] ? 'active-liked' : '' ?>" id="like-btn-<?= $postId ?>" onclick="toggleLikePost(event, <?= $postId ?>)" title="Like">
-
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="<?= $post['is_liked'] ? 'currentColor' : 'none' ?>" stroke="currentColor" stroke-width="1.8">
-
-                      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"></path>
-
-                    </svg>
-
-                    <span id="like-count-<?= $postId ?>"><?= (int)$post['like_count'] > 0 ? (int)$post['like_count'] : '' ?></span>
-
-                  </button>
-
                 </div>
 
 
@@ -2836,7 +2783,17 @@ HTML PART starts here
 
                   <!-- Reply Composer Box -->
 
-                  <?php if ($currentUser): ?>
+                  <?php if ($isPostGroupRestricted && !is_admin()): ?>
+
+                  <div class="group-restricted-alert" style="margin-bottom: 16px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                    <span><strong>Restricted Group:</strong> Posting and replying are currently unavailable.</span>
+                  </div>
+
+                  <?php elseif ($currentUser): ?>
 
                   <form action="index.php" method="POST" enctype="multipart/form-data" class="reply-composer-form" id="reply-form-<?= $postId ?>" style="margin-bottom: 16px; padding: 12px; background: var(--bg-input); border-radius: 14px; border: 1px solid var(--border-color);">
 
@@ -2964,7 +2921,7 @@ HTML PART starts here
 
                       <?php foreach ($topLevelReplies as $rep): ?>
 
-                        <?php renderReplyNode($rep, $childrenByParent, $repliesById, $currentUser, $postId, 0); ?>
+                        <?php renderReplyNode($rep, $childrenByParent, $repliesById, $currentUser, $postId, 0, $isPostGroupRestricted); ?>
 
                       <?php endforeach; ?>
 
@@ -3225,34 +3182,17 @@ HTML PART starts here
 
         <div class="x-compose-right">
 
-          <!-- Group Selector -->
+          <!-- Group Picker Pill Trigger -->
           <div class="composer-group-field">
-            <div class="composer-group-select-wrap" id="composer-group-wrap">
-              <label for="post-group-id" class="composer-group-label">
-                <span class="composer-group-thumb" id="composer-selected-group-icon" aria-hidden="true">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                    <circle cx="9" cy="7" r="4"></circle>
-                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                  </svg>
-                </span>
-                <span>Select a Group</span>
-              </label>
-
-              <select name="group_id" id="post-group-id" class="composer-group-select" required>
-                <?php if (empty($userJoinedGroups)): ?>
-                  <option value="" disabled selected>Join an active group first</option>
-                <?php else: ?>
-                  <option value="" disabled <?= empty($selected_group_id) ? 'selected' : '' ?>>Choose a group...</option>
-                  <?php foreach ($userJoinedGroups as $jg): ?>
-                    <option value="<?= (int)$jg['id'] ?>" data-image="<?= e($jg['image_url'] ?? '') ?>" <?= $selected_group_id === (int)$jg['id'] ? 'selected' : '' ?>>
-                      <?= e($jg['name']) ?>
-                    </option>
-                  <?php endforeach; ?>
-                <?php endif; ?>
-              </select>
-            </div>
+            <input type="hidden" name="group_id" id="post-group-id" value="<?= !empty($selected_group_id) ? (int)$selected_group_id : '' ?>">
+            <button type="button" class="group-picker-pill" id="group-picker-trigger" onclick="openChooseGroupModal()">
+              <span class="group-picker-pill-thumb" id="composer-selected-group-icon" style="display: none;"></span>
+              <span class="group-picker-pill-label" id="composer-selected-group-label">Select Group</span>
+              <svg class="group-picker-pill-chevrons" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="7 15 12 20 17 15"></polyline>
+                <polyline points="7 9 12 4 17 9"></polyline>
+              </svg>
+            </button>
             <div class="composer-field-error" id="create-post-group-error" role="alert" style="display: none;"></div>
           </div>
 
@@ -3310,7 +3250,61 @@ HTML PART starts here
 
 </div>
 
+<!-- CHOOSE GROUP POPUP MODAL -->
+<div class="modal-overlay" id="choose-group-modal" onclick="if(event.target===this) closeChooseGroupModal()">
+  <div class="modal-dialog choose-group-dialog">
+    <div class="choose-group-header">
+      <h3 class="choose-group-title">Choose group</h3>
+      <button type="button" class="choose-group-close" onclick="closeChooseGroupModal()" aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
 
+    <div class="choose-group-search-wrap">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="choose-group-search-icon">
+        <circle cx="11" cy="11" r="8"></circle>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+      </svg>
+      <input type="search" id="choose-group-search" class="choose-group-search-input" placeholder="Search" autocomplete="off">
+    </div>
+
+    <div class="choose-group-list" id="choose-group-list">
+      <?php if (empty($userJoinedGroups)): ?>
+        <div class="choose-group-empty">
+          <p>You have not joined any active groups yet.</p>
+          <a href="index.php?view=groups" class="btn-join-group" style="padding: 6px 14px; font-size: 12.5px;">Browse Groups</a>
+        </div>
+      <?php else: ?>
+        <?php foreach ($userJoinedGroups as $jg): ?>
+          <button type="button" class="choose-group-item" data-id="<?= (int)$jg['id'] ?>" data-name="<?= e($jg['name']) ?>" data-image="<?= e($jg['image_url'] ?? '') ?>" onclick="selectComposerGroup(<?= (int)$jg['id'] ?>, this.getAttribute('data-name'), this.getAttribute('data-image'))">
+            <div class="choose-group-item-avatar">
+              <?php if (!empty($jg['image_url'])): ?>
+                <img src="<?= e($jg['image_url']) ?>" alt="<?= e($jg['name']) ?>">
+              <?php else: ?>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9" cy="7" r="4"></circle>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+              <?php endif; ?>
+            </div>
+            <div class="choose-group-item-info">
+              <div class="choose-group-item-name"><?= e($jg['name']) ?></div>
+              <div class="choose-group-item-meta"><?= (int)($jg['member_count'] ?? 0) ?> <?= (int)($jg['member_count'] ?? 0) === 1 ? 'member' : 'members' ?></div>
+              <?php if (!empty($jg['description'])): ?>
+                <div class="choose-group-item-desc"><?= e($jg['description']) ?></div>
+              <?php endif; ?>
+            </div>
+          </button>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </div>
+  </div>
+</div>
 
 <!-- EDIT POST MODAL -->
 
@@ -3416,11 +3410,15 @@ HTML PART starts here
 
     <div class="modal-header">
 
-      <h3 class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+      <h3 class="modal-title" style="display: flex; align-items: center; gap: 10px;">
 
-        <span style="color: #38bdf8;">🛡️</span>
+        <span class="modal-title-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          </svg>
+        </span>
 
-        <span>Create New Academic Group</span>
+        <span>Create New Group</span>
 
       </h3>
 
@@ -3466,9 +3464,26 @@ HTML PART starts here
 
         <div class="form-group">
 
-          <label class="form-label">Group Image / Icon (Optional)</label>
+          <label class="form-label" for="new-group-image">Group Image / Icon (Optional)</label>
 
-          <input type="file" name="group_image" accept="image/*" class="form-input">
+          <div class="group-upload-control" data-upload-control>
+            <input type="file" name="group_image" id="new-group-image" accept="image/*" class="group-upload-native-input">
+            <label for="new-group-image" class="group-upload-dropzone">
+              <span class="group-upload-preview" data-upload-preview>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="4" ry="4"></rect>
+                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                  <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+              </span>
+              <span class="group-upload-meta">
+                <span class="group-upload-filename" data-upload-filename>Upload group logo or icon</span>
+                <span class="group-upload-hint">PNG, JPG, WEBP · Optional</span>
+              </span>
+              <span class="group-upload-btn">Choose Image</span>
+            </label>
+            <button type="button" class="group-upload-clear" data-upload-clear title="Remove selected image" style="display: none;">✕</button>
+          </div>
 
         </div>
 
@@ -3498,11 +3513,16 @@ HTML PART starts here
 
     <div class="modal-header">
 
-      <h3 class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+      <h3 class="modal-title" style="display: flex; align-items: center; gap: 10px;">
 
-        <span style="color: #38bdf8;">✏️</span>
+        <span class="modal-title-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+          </svg>
+        </span>
 
-        <span>Edit Academic Group</span>
+        <span>Edit Group</span>
 
       </h3>
 
@@ -3552,9 +3572,26 @@ HTML PART starts here
 
         <div class="form-group">
 
-          <label class="form-label">Update Group Image (Optional)</label>
+          <label class="form-label" for="edit-group-image">Update Group Image (Optional)</label>
 
-          <input type="file" name="group_image" accept="image/*" class="form-input">
+          <div class="group-upload-control" data-upload-control>
+            <input type="file" name="group_image" id="edit-group-image" accept="image/*" class="group-upload-native-input">
+            <label for="edit-group-image" class="group-upload-dropzone">
+              <span class="group-upload-preview" data-upload-preview>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="4" ry="4"></rect>
+                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                  <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+              </span>
+              <span class="group-upload-meta">
+                <span class="group-upload-filename" data-upload-filename>Upload new group logo or icon</span>
+                <span class="group-upload-hint">PNG, JPG, WEBP · Leave empty to keep current</span>
+              </span>
+              <span class="group-upload-btn">Choose Image</span>
+            </label>
+            <button type="button" class="group-upload-clear" data-upload-clear title="Remove selected image" style="display: none;">✕</button>
+          </div>
 
         </div>
 

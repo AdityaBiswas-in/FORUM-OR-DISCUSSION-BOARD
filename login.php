@@ -253,10 +253,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     <span id="auth-theme-text">Dark</span>
   </button>
 
-  <!-- Campus Background Layers -->
-  <div class="auth-bg-layer"></div>
-  <div class="auth-overlay-gradient"></div>
-
   <div class="auth-wrapper">
     <!-- Brand Header -->
     <div class="auth-header-branding">
@@ -465,6 +461,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         btn.textContent = 'Verifying credentials...';
         btn.style.opacity = '0.85';
       }
+    });
+
+    document.querySelectorAll('.auth-role-tab, .auth-footer-prompt a').forEach(function(link) {
+      link.addEventListener('click', function(e) {
+        const href = link.getAttribute('href');
+        if (!href || e.metaKey || e.ctrlKey || e.shiftKey) return;
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        e.preventDefault();
+        const card = document.querySelector('.auth-card');
+        if (card) card.classList.add('is-transitioning');
+        setTimeout(function() { window.location.href = href; }, 140);
+      });
     });
   </script>
 </body>

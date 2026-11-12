@@ -78,39 +78,13 @@ body.auth-page {
   overflow-x: hidden;
   padding: 40px 16px;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease;
 }
 
-/* Campus Night Background Layer */
-.auth-bg-layer {
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  background-image: url('../images/campus_night_bg.jpg');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  filter: brightness(0.65) contrast(1.05);
-  z-index: 1;
-}
-
-[data-theme="light"] .auth-bg-layer {
-  filter: brightness(0.85) contrast(1.02);
-  opacity: 0.35;
-}
-
+/* Clean, professional background (no blurred photo layer) */
+.auth-bg-layer,
 .auth-overlay-gradient {
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  background: radial-gradient(circle at center, rgba(15, 23, 42, 0.78) 0%, rgba(7, 14, 27, 0.94) 100%);
-  backdrop-filter: blur(4px);
-  z-index: 2;
-}
-
-[data-theme="light"] .auth-overlay-gradient {
-  background: radial-gradient(circle at center, rgba(248, 250, 252, 0.85) 0%, rgba(241, 245, 249, 0.96) 100%);
+  display: none;
 }
 
 /* Theme Switcher Button */
@@ -227,38 +201,54 @@ body.auth-page {
   width: 100%;
   background: var(--bg-card);
   border: 1px solid var(--border-card);
-  border-radius: 12px;
-  padding: 26px 24px;
+  border-radius: 14px;
+  padding: 28px 26px;
   box-shadow: var(--card-shadow);
-  backdrop-filter: blur(12px);
-  transition: border-color 0.2s ease;
+  transition: opacity 0.16s ease, transform 0.16s ease, border-color 0.2s ease;
+  animation: authCardEnter 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Clean 3-Segment Role Switcher */
+.auth-card.is-transitioning {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+@keyframes authCardEnter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Clean 2-Segment Role Switcher */
 .auth-role-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 3px;
+  display: flex;
+  gap: 4px;
   background: var(--bg-tab-bar);
   border: 1px solid var(--border-input);
-  border-radius: 8px;
-  padding: 3px;
-  margin-bottom: 20px;
+  border-radius: 9px;
+  padding: 4px;
+  margin-bottom: 22px;
 }
 
 .auth-role-tab {
+  flex: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 7px 8px;
+  gap: 7px;
+  padding: 8px 10px;
   font-size: 13px;
   font-weight: 500;
   color: var(--text-muted);
   text-decoration: none;
   border-radius: 6px;
   border: 1px solid transparent;
-  transition: all 0.15s ease;
+  transition: all 0.16s ease;
   white-space: nowrap;
 }
 

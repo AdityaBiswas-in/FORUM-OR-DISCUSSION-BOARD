@@ -73,25 +73,61 @@ function toggleProfileDropdown(e) {
 }
 
 // 5. Modals Management
-function updateComposerGroupIcon() {
-  const select = document.getElementById('post-group-id');
-  const iconWrap = document.getElementById('composer-selected-group-icon');
-  if (!select || !iconWrap) return;
-
-  const opt = select.options[select.selectedIndex];
-  const imgUrl = opt ? (opt.getAttribute('data-image') || '') : '';
-  if (imgUrl) {
-    iconWrap.innerHTML = `<img src="${imgUrl.replace(/"/g, '&quot;')}" alt="">`;
-  } else {
-    iconWrap.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>`;
+function openChooseGroupModal() {
+  const modal = document.getElementById('choose-group-modal');
+  if (!modal) return;
+  modal.classList.add('active');
+  const searchInput = document.getElementById('choose-group-search');
+  if (searchInput) {
+    searchInput.value = '';
+    document.querySelectorAll('#choose-group-list .choose-group-item').forEach(el => {
+      el.style.display = '';
+    });
+    setTimeout(() => searchInput.focus(), 80);
   }
 }
 
+function closeChooseGroupModal() {
+  const modal = document.getElementById('choose-group-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+function selectComposerGroup(groupId, groupName, imgUrl) {
+  const hiddenInput = document.getElementById('post-group-id');
+  const labelEl = document.getElementById('composer-selected-group-label');
+  const iconWrap = document.getElementById('composer-selected-group-icon');
+  const trigger = document.getElementById('group-picker-trigger');
+
+  if (hiddenInput) hiddenInput.value = groupId ? String(groupId) : '';
+  if (labelEl) labelEl.textContent = groupName || 'Select Group';
+
+  if (iconWrap) {
+    if (groupId && imgUrl) {
+      iconWrap.innerHTML = `<img src="${imgUrl.replace(/"/g, '&quot;')}" alt="">`;
+      iconWrap.style.display = 'inline-flex';
+    } else if (groupId) {
+      iconWrap.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>`;
+      iconWrap.style.display = 'inline-flex';
+    } else {
+      iconWrap.innerHTML = '';
+      iconWrap.style.display = 'none';
+    }
+  }
+
+  document.querySelectorAll('#choose-group-list .choose-group-item').forEach(el => {
+    el.classList.toggle('is-selected', el.getAttribute('data-id') === String(groupId));
+  });
+
+  if (trigger) trigger.classList.remove('has-error');
+  clearCreatePostErrors();
+  closeChooseGroupModal();
+}
+
 function clearCreatePostErrors() {
-  const wrap = document.getElementById('composer-group-wrap');
+  const trigger = document.getElementById('group-picker-trigger');
   const errEl = document.getElementById('create-post-group-error');
   const fbEl = document.getElementById('create-post-form-feedback');
-  if (wrap) wrap.classList.remove('has-error');
+  if (trigger) trigger.classList.remove('has-error');
   if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
   if (fbEl) { fbEl.style.display = 'none'; fbEl.textContent = ''; fbEl.classList.remove('is-success'); }
 }
@@ -100,11 +136,16 @@ function openCreateThreadModal(groupId) {
   const modal = document.getElementById('create-thread-modal');
   if (modal) {
     clearCreatePostErrors();
-    const select = document.getElementById('post-group-id');
-    if (select && groupId) {
-      select.value = String(groupId);
+    const hiddenInput = document.getElementById('post-group-id');
+    const targetId = groupId ? String(groupId) : (hiddenInput ? hiddenInput.value : '');
+    if (targetId) {
+      const item = document.querySelector(`#choose-group-list .choose-group-item[data-id="${targetId}"]`);
+      if (item) {
+        selectComposerGroup(targetId, item.getAttribute('data-name') || '', item.getAttribute('data-image') || '');
+      }
+    } else {
+      selectComposerGroup('', 'Select Group', '');
     }
-    updateComposerGroupIcon();
     modal.classList.add('active');
     setTimeout(() => {
       const input = document.getElementById('post-title');
@@ -581,7 +622,101 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     if (adminGroupsSearch) adminGroupsSearch.addEventListener('input', filterAdminGroups);
     if (adminGroupsStatus) adminGroupsStatus.addEventListener('change', filterAdminGroups);
+
+    // Custom Status Dropdown Interactions
+    const statusDropdown = document.getElementById('admin-status-dropdown');
+    const statusTrigger = document.getElementById('admin-status-trigger');
+    const statusMenu = document.getElementById('admin-status-menu');
+    const statusTriggerLabel = document.getElementById('admin-status-trigger-label');
+    const statusTriggerDot = document.getElementById('admin-status-trigger-dot');
+    if (statusDropdown && statusTrigger && statusMenu && adminGroupsStatus) {
+      const closeStatusMenu = () => {
+        statusDropdown.classList.remove('open');
+        statusTrigger.setAttribute('aria-expanded', 'false');
+      };
+
+      statusTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = statusDropdown.classList.toggle('open');
+        statusTrigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      });
+
+      statusMenu.querySelectorAll('.admin-status-option').forEach((opt) => {
+        opt.addEventListener('click', () => {
+          const val = opt.getAttribute('data-value') || 'all';
+          const label = opt.getAttribute('data-label') || 'All Statuses';
+          const dotClass = opt.getAttribute('data-dot') || 'dot-all';
+
+          adminGroupsStatus.value = val;
+          if (statusTriggerLabel) statusTriggerLabel.textContent = label;
+          if (statusTriggerDot) statusTriggerDot.className = 'admin-status-dot ' + dotClass;
+
+          statusMenu.querySelectorAll('.admin-status-option').forEach((o) => {
+            const isSelected = o === opt;
+            o.classList.toggle('active', isSelected);
+            o.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+          });
+
+          closeStatusMenu();
+          filterAdminGroups();
+        });
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!statusDropdown.contains(e.target)) closeStatusMenu();
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && statusDropdown.classList.contains('open')) {
+          closeStatusMenu();
+          statusTrigger.focus();
+        }
+      });
+    }
   }
+
+  // Custom Group Image Upload Controls (Create & Edit Group Modals)
+  document.querySelectorAll('[data-upload-control]').forEach((control) => {
+    const input = control.querySelector('input[type="file"]');
+    const preview = control.querySelector('[data-upload-preview]');
+    const filenameEl = control.querySelector('[data-upload-filename]');
+    const clearBtn = control.querySelector('[data-upload-clear]');
+    if (!input || !preview || !filenameEl) return;
+
+    const defaultIconHtml = preview.innerHTML;
+    const defaultLabel = filenameEl.textContent;
+
+    const resetUpload = () => {
+      input.value = '';
+      preview.innerHTML = defaultIconHtml;
+      filenameEl.textContent = defaultLabel;
+      if (clearBtn) clearBtn.style.display = 'none';
+    };
+
+    input.addEventListener('change', () => {
+      const file = input.files && input.files[0];
+      if (!file) {
+        resetUpload();
+        return;
+      }
+      filenameEl.textContent = file.name;
+      if (clearBtn) clearBtn.style.display = 'inline-flex';
+      if (file.type && file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          preview.innerHTML = `<img src="${ev.target.result}" alt="Selected group image">`;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    if (clearBtn) {
+      clearBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        resetUpload();
+      });
+    }
+  });
 
   // Admin Console: Live Moderation Post Search
   const adminPostsSearch = document.getElementById('admin-posts-search');
@@ -616,15 +751,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Choose Group Popup: Live Search
+  const chooseGroupSearch = document.getElementById('choose-group-search');
+  if (chooseGroupSearch) {
+    chooseGroupSearch.addEventListener('input', () => {
+      const q = chooseGroupSearch.value.trim().toLowerCase();
+      document.querySelectorAll('#choose-group-list .choose-group-item').forEach((item) => {
+        item.style.display = (!q || item.textContent.toLowerCase().includes(q)) ? '' : 'none';
+      });
+    });
+  }
+
   // Create Post Modal: Group selection, validation & AJAX submit
   const createPostForm = document.getElementById('create-post-form');
-  const postGroupSelect = document.getElementById('post-group-id');
-  if (postGroupSelect) {
-    updateComposerGroupIcon();
-    postGroupSelect.addEventListener('change', () => {
-      updateComposerGroupIcon();
-      clearCreatePostErrors();
-    });
+  const postGroupInput = document.getElementById('post-group-id');
+  if (postGroupInput && postGroupInput.value) {
+    const preItem = document.querySelector(`#choose-group-list .choose-group-item[data-id="${postGroupInput.value}"]`);
+    if (preItem) {
+      selectComposerGroup(postGroupInput.value, preItem.getAttribute('data-name') || '', preItem.getAttribute('data-image') || '');
+    }
   }
 
   if (createPostForm) {
@@ -634,21 +779,21 @@ document.addEventListener('DOMContentLoaded', () => {
       if (createPostForm.dataset.submitting === '1') return;
 
       clearCreatePostErrors();
-      const groupVal = postGroupSelect ? postGroupSelect.value.trim() : '';
+      const groupVal = postGroupInput ? postGroupInput.value.trim() : '';
       const titleInput = document.getElementById('post-title');
       const contentInput = document.getElementById('post-content');
       const submitBtn = document.getElementById('btn-submit-post');
-      const wrap = document.getElementById('composer-group-wrap');
+      const trigger = document.getElementById('group-picker-trigger');
       const groupErr = document.getElementById('create-post-group-error');
       const feedbackEl = document.getElementById('create-post-form-feedback');
 
       if (!groupVal) {
-        if (wrap) wrap.classList.add('has-error');
+        if (trigger) trigger.classList.add('has-error');
         if (groupErr) {
           groupErr.textContent = 'Please select a group before publishing your discussion.';
           groupErr.style.display = 'block';
         }
-        if (postGroupSelect) postGroupSelect.focus();
+        if (trigger) trigger.focus();
         return;
       }
 
@@ -677,8 +822,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const data = await res.json();
 
         if (!data.success) {
-          if (data.field === 'group_id' && wrap && groupErr) {
-            wrap.classList.add('has-error');
+          if (data.field === 'group_id' && trigger && groupErr) {
+            trigger.classList.add('has-error');
             groupErr.textContent = data.message || 'Please select a group before publishing your discussion.';
             groupErr.style.display = 'block';
           } else if (feedbackEl) {

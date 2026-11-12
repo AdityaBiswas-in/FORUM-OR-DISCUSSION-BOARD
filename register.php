@@ -35,10 +35,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     // 1. Mandatory Field Validation
     if ($name === '' || $email === '' || $password === '' || $confirm === '') {
         $error = 'Please fill in all required fields.';
-    } elseif ($role !== 'student' && $account_id === '') {
-        $error = 'Please enter your 10-digit ' . ucfirst($role) . ' ID.';
-    } elseif ($role !== 'student' && !preg_match('/^[0-9]{10}$/', $account_id)) {
-        // 2. Strict 10-Digit Numeric ID Validation (Admin / Faculty)
+    } elseif ($role === 'faculty' && $account_id === '') {
+        $error = 'Please enter your 10-digit Faculty ID.';
+    } elseif ($role === 'faculty' && !preg_match('/^[0-9]{10}$/', $account_id)) {
+        // 2. Strict 10-Digit Numeric ID Validation (Faculty)
         $error = 'Unique ID must contain exactly 10 numeric digits (digits only, no letters or special characters).';
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         // 3. Email Validation
@@ -48,17 +48,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $error = 'Passwords do not match.';
     } elseif (strlen($password) < 6) {
         $error = 'Password must be at least 6 characters.';
-    } elseif ($role !== 'student' && check_id_exists($account_id, $conn)) {
+    } elseif ($role === 'faculty' && check_id_exists($account_id, $conn)) {
         // 5. Cross-Table Unique ID Check (reject duplicates across students, faculty, and admins)
         $error = 'This 10-digit ID is already registered in the system. Duplicate IDs are not permitted.';
     } elseif (check_email_exists($email, $conn)) {
         // 6. Cross-Table Unique Email Check
         $error = 'This email address is already registered in the system. Please use a different email.';
     } else {
-        // Auto-generate a unique internal 10-digit record ID for student/normal users
-        if ($role === 'student') {
+        // Auto-generate a unique internal 10-digit record ID for student and admin accounts
+        if ($role === 'student' || $role === 'admin') {
+            $minId = ($role === 'admin') ? 9000000000 : 1000000000;
+            $maxId = ($role === 'admin') ? 9999999999 : 1999999999;
             do {
-                $account_id = (string)random_int(1000000000, 1999999999);
+                $account_id = (string)random_int($minId, $maxId);
             } while (
                 check_id_exists($account_id, $conn) ||
                 $conn->execute_query("SELECT 1 FROM users WHERE uid = ? LIMIT 1", [$account_id])->fetch_row()
@@ -84,7 +86,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             }
 
             if (!$isAuthorizedAdmin) {
-                $error = 'Authorization Failed: Unauthorized Admin ID or invalid Admin Authorization Key.';
+                $error = 'Authorization Failed: Invalid Admin Authorization Key.';
             }
         }
 
@@ -154,10 +156,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     <span id="auth-theme-text">Dark</span>
   </button>
 
-  <!-- Campus Background Layers -->
-  <div class="auth-bg-layer"></div>
-  <div class="auth-overlay-gradient"></div>
-
   <div class="auth-wrapper">
     <!-- Brand Header -->
     <div class="auth-header-branding">
@@ -194,7 +192,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
       <div class="auth-card-header">
         <?php if ($requestedRole === 'admin'): ?>
           <h2 class="auth-card-title">Admin Registration</h2>
-          <p class="auth-card-subtitle">Register with your authorized 10-digit Admin ID, email, and password.</p>
+          <p class="auth-card-subtitle">Register using your name, email address, password, and Admin Authorization Key.</p>
         <?php elseif ($requestedRole === 'faculty'): ?>
           <h2 class="auth-card-title">Faculty Registration</h2>
           <p class="auth-card-subtitle">Create a faculty account using your official 10-digit Faculty ID.</p>
@@ -230,14 +228,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
           <input type="email" name="email" id="reg-email" class="form-control" placeholder="<?= $requestedRole === 'student' ? 'e.g. student@college.edu' : 'e.g. faculty@college.edu' ?>" value="<?= isset($_POST['email']) ? e($_POST['email']) : '' ?>" autocomplete="email" required>
         </div>
 
-        <?php if ($requestedRole === 'admin' || $requestedRole === 'faculty'): ?>
-        <!-- 3. Unique 10-Digit ID (Required for Admin / Faculty) -->
+        <?php if ($requestedRole === 'faculty'): ?>
+        <!-- 3. Unique 10-Digit ID (Internal Faculty only) -->
         <div class="form-group">
           <div class="form-label-row">
-            <label for="account_id_input" class="form-label">10-Digit <?= ucfirst($requestedRole) ?> ID <span class="required" aria-hidden="true">*</span></label>
+            <label for="account_id_input" class="form-label">10-Digit Faculty ID <span class="required" aria-hidden="true">*</span></label>
             <span class="form-label-hint">Digits only</span>
           </div>
-          <input type="text" name="account_id" id="account_id_input" class="form-control" placeholder="<?= $requestedRole === 'admin' ? 'e.g. 9000000001' : 'e.g. 2000000001' ?>" value="<?= isset($_POST['account_id']) ? e($_POST['account_id']) : '' ?>" maxlength="10" pattern="[0-9]{10}" inputmode="numeric" required oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 10)">
+          <input type="text" name="account_id" id="account_id_input" class="form-control" placeholder="e.g. 2000000001" value="<?= isset($_POST['account_id']) ? e($_POST['account_id']) : '' ?>" maxlength="10" pattern="[0-9]{10}" inputmode="numeric" required oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 10)">
           <span class="form-help-text">Enter your official 10-digit institutional ID number.</span>
         </div>
         <?php endif; ?>
@@ -337,6 +335,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         btn.textContent = 'Creating account...';
         btn.style.opacity = '0.85';
       }
+    });
+
+    document.querySelectorAll('.auth-role-tab, .auth-footer-prompt a').forEach(function(link) {
+      link.addEventListener('click', function(e) {
+        const href = link.getAttribute('href');
+        if (!href || e.metaKey || e.ctrlKey || e.shiftKey) return;
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        e.preventDefault();
+        const card = document.querySelector('.auth-card');
+        if (card) card.classList.add('is-transitioning');
+        setTimeout(function() { window.location.href = href; }, 140);
+      });
     });
   </script>
 </body>

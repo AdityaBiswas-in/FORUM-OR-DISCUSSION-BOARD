@@ -230,11 +230,9 @@ if ($tab === 'posts') {
 
     $userPosts = $conn->execute_query("
 
-        SELECT p.*, g.name as group_name, u.name as author_name, u.username as author_username, u.avatar as author_avatar,
+        SELECT p.*, g.name as group_name, g.image_url as group_image, u.name as author_name, u.username as author_username, u.avatar as author_avatar,
 
-               (SELECT COUNT(*) FROM replies r WHERE r.post_id = p.id) as reply_count,
-
-               (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id AND l.reply_id IS NULL) as like_count
+               (SELECT COUNT(*) FROM replies r WHERE r.post_id = p.id) as reply_count
 
         FROM posts p
 
@@ -438,22 +436,6 @@ HTML PART
 
         </li>
 
-        <li class="nav-item <?= $isOwnProfile ? 'active' : '' ?>">
-
-          <a href="profile.php">
-
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-
-              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-
-            </svg>
-
-            <span>Profile</span>
-
-          </a>
-
-        </li>
-
         <li class="nav-item">
 
           <a href="index.php?view=groups">
@@ -478,9 +460,9 @@ HTML PART
 
         <?php if (function_exists('is_admin') && is_admin()): ?>
 
-        <li class="nav-item">
+        <li class="nav-item nav-item-admin">
 
-          <a href="index.php?view=admin" style="color: var(--accent-orange, #f59e0b);">
+          <a href="index.php?view=admin" id="nav-admin" class="nav-link-admin">
 
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 
@@ -497,6 +479,22 @@ HTML PART
         </li>
 
         <?php endif; ?>
+
+        <li class="nav-item <?= $isOwnProfile ? 'active' : '' ?>">
+
+          <a href="profile.php">
+
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+
+              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+
+            </svg>
+
+            <span>Profile</span>
+
+          </a>
+
+        </li>
 
         <li class="nav-item">
 
@@ -892,50 +890,38 @@ HTML PART
 
             ?>
 
-            <article class="post-card" onclick="window.location.href='index.php?post=<?= $pId ?>'" style="cursor: pointer;">
-
-              <div class="post-avatar-col">
-
-                <img src="<?= e($post['author_avatar']) ?>" alt="<?= e($post['author_name']) ?>" class="author-avatar">
-
-              </div>
+            <article class="post-card post-card-reddit" onclick="window.location.href='index.php?post=<?= $pId ?>'" style="cursor: pointer;">
 
               <div class="post-main-col">
 
-                <div class="post-header">
-
-                  <div class="post-author-meta">
-
-                    <span class="author-name"><?= e($post['author_name']) ?></span>
-
-                    <span class="user-handle">@<?= e($post['author_username']) ?></span>
-
-                    <span class="post-timestamp">· <?= time_ago($post['created_at']) ?></span>
-
-                  </div>
-
-                  <?php if (!empty($post['group_name'])): ?>
-
-                    <a href="index.php?group=<?= (int)$post['group_id'] ?>" class="post-group-badge" onclick="event.stopPropagation()">
-
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-
-                        <circle cx="9" cy="7" r="4"></circle>
-
-                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-
-                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-
-                      </svg>
-
-                      <span><?= e($post['group_name']) ?></span>
-
+                <?php if (!empty($post['group_name'])): ?>
+                  <div class="post-header post-header-community-row">
+                    <a href="index.php?group=<?= (int)$post['group_id'] ?>" class="post-community-link" onclick="event.stopPropagation()" title="View <?= e($post['group_name']) ?>">
+                      <?php if (!empty($post['group_image'])): ?>
+                        <img src="<?= e($post['group_image']) ?>" alt="<?= e($post['group_name']) ?>" class="post-community-avatar">
+                      <?php else: ?>
+                        <span class="post-community-avatar-fallback" aria-hidden="true">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                          </svg>
+                        </span>
+                      <?php endif; ?>
+                      <span class="post-community-name"><?= e($post['group_name']) ?></span>
                     </a>
+                  </div>
+                <?php endif; ?>
 
-                  <?php endif; ?>
-
+                <div class="post-header-author-row">
+                  <span class="post-inline-author-link">
+                    <img src="<?= e($post['author_avatar']) ?>" alt="<?= e($post['author_name']) ?>" class="post-inline-avatar">
+                    <span class="author-name-inline"><?= e($post['author_name']) ?></span>
+                    <span class="user-handle-inline">@<?= e($post['author_username']) ?></span>
+                  </span>
+                  <span class="post-dot">·</span>
+                  <span class="post-timestamp"><?= time_ago($post['created_at']) ?></span>
                 </div>
 
                 
@@ -983,14 +969,6 @@ HTML PART
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
 
                     <?= (int)$post['reply_count'] ?> replies
-
-                  </span>
-
-                  <span style="display: inline-flex; align-items: center; gap: 6px;">
-
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-
-                    <?= (int)$post['like_count'] ?> likes
 
                   </span>
 

@@ -8,16 +8,13 @@ USE `quaddit`;
 
 -- Drop existing tables in reverse dependency order
 SET FOREIGN_KEY_CHECKS = 0;
-DROP TABLE IF EXISTS `likes`;
 DROP TABLE IF EXISTS `post_images`;
 DROP TABLE IF EXISTS `replies`;
 DROP TABLE IF EXISTS `posts`;
 DROP TABLE IF EXISTS `group_members`;
 DROP TABLE IF EXISTS `groups`;
 DROP TABLE IF EXISTS `students`;
-DROP TABLE IF EXISTS `faculty`;
 DROP TABLE IF EXISTS `admins`;
-DROP TABLE IF EXISTS `authorized_admins`;
 DROP TABLE IF EXISTS `users`;
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -38,22 +35,7 @@ CREATE TABLE `students` (
   UNIQUE KEY `idx_students_email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ============================================================
--- 2. Table: faculty
--- Dedicated storage for Faculty / Teacher accounts
--- ============================================================
-CREATE TABLE `faculty` (
-  `id` VARCHAR(10) NOT NULL COMMENT 'Unique 10-digit Faculty ID',
-  `name` VARCHAR(100) NOT NULL COMMENT 'Full faculty name',
-  `email` VARCHAR(100) NOT NULL COMMENT 'Unique faculty email',
-  `password` VARCHAR(255) NOT NULL COMMENT 'Bcrypt hashed password',
-  `avatar` LONGTEXT NULL COMMENT 'Base64 data URI or image URL',
-  `banner_url` LONGTEXT NULL COMMENT 'Base64 data URI or banner image URL',
-  `bio` VARCHAR(255) DEFAULT 'Faculty member at Quaddit',
-  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `idx_faculty_email` (`email`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 
 -- ============================================================
 -- 3. Table: admins
@@ -72,19 +54,7 @@ CREATE TABLE `admins` (
   UNIQUE KEY `idx_admins_email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ============================================================
--- 4. Table: authorized_admins
--- Pre-authorized faculty/staff list allowed to register as Admin
--- ============================================================
-CREATE TABLE `authorized_admins` (
-  `admin_id` VARCHAR(10) NOT NULL,
-  `name` VARCHAR(100) NOT NULL,
-  `department` VARCHAR(100) NOT NULL DEFAULT 'Academic Administration',
-  `auth_key` VARCHAR(100) NOT NULL DEFAULT 'QUAD-ADMIN-2026',
-  `is_registered` TINYINT(1) NOT NULL DEFAULT 0,
-  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`admin_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 
 -- ============================================================
 -- 5. Table: users
@@ -191,22 +161,5 @@ CREATE TABLE `replies` (
   CONSTRAINT `fk_replies_parent` FOREIGN KEY (`parent_id`) REFERENCES `replies` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ============================================================
--- 11. Table: likes
--- Like interactions on posts and replies
--- ============================================================
-CREATE TABLE `likes` (
-  `id` INT AUTO_INCREMENT PRIMARY KEY,
-  `user_id` INT NOT NULL,
-  `post_id` INT NULL,
-  `reply_id` INT NULL,
-  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  INDEX `idx_likes_user` (`user_id`),
-  INDEX `idx_likes_post` (`post_id`),
-  INDEX `idx_likes_reply` (`reply_id`),
-  CONSTRAINT `fk_likes_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_likes_post` FOREIGN KEY (`post_id`) REFERENCES `posts` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_likes_reply` FOREIGN KEY (`reply_id`) REFERENCES `replies` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
