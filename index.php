@@ -50,7 +50,29 @@ function upload_single_image(?array $file): ?string {
     return null;
 }
 
-
+// Render Rich Text / Markdown Formatting Toolbar (Bold, Italic, Strikethrough, Superscript, Heading)
+function render_format_toolbar(string $targetId = '', string $extraClass = ''): void {
+?>
+  <div class="format-toolbar <?= $extraClass ?>" <?= !empty($targetId) ? 'data-target="' . e($targetId) . '"' : '' ?> role="toolbar" aria-label="Text formatting">
+    <button type="button" class="format-btn" data-format="bold" title="Bold (Ctrl+B)">
+      <span class="fmt-b">B</span>
+    </button>
+    <button type="button" class="format-btn" data-format="italic" title="Italic (Ctrl+I)">
+      <span class="fmt-i">i</span>
+    </button>
+    <button type="button" class="format-btn" data-format="strike" title="Strikethrough">
+      <span class="fmt-s">S</span>
+    </button>
+    <button type="button" class="format-btn" data-format="super" title="Superscript">
+      <span class="fmt-sup">X<sup>2</sup></span>
+    </button>
+    <button type="button" class="format-btn" data-format="heading" title="Heading">
+      <span class="fmt-heading">ᴛT</span>
+    </button>
+    <span class="format-divider" aria-hidden="true"></span>
+  </div>
+<?php
+}
 
 // Recursively render a reply and its child replies
 function renderReplyNode(array $rep, array $childrenByParent, array $repliesById, ?array $currentUser, int $postId, int $depth = 0, bool $isGroupRestricted = false): void {
@@ -88,8 +110,6 @@ function renderReplyNode(array $rep, array $childrenByParent, array $repliesById
             <?php endif; ?>
           </div>
 
-
-
           <!-- 3-Dots Actions Menu for reply author / admin (Edit, Delete) -->
 
           <?php if (($isRepAuthor && $canModifyReply) || is_admin()): ?>
@@ -121,33 +141,23 @@ function renderReplyNode(array $rep, array $childrenByParent, array $repliesById
           <?php endif; ?>
         </div>
         <!-- Reply Body Text -->
-
         <div class="reply-body-text" id="reply-text-<?= $repId ?>" style="font-size: 13.5px; color: var(--text-main); line-height: 1.5; margin-bottom: 6px;">
-          <?= nl2br(e($rep['content'])) ?>
+          <?= format_post_content($rep['content']) ?>
         </div>
-
         <!-- Inline Reply Edit Form -->
-
         <?php if ($isRepAuthor && $canModifyReply): ?>
-
           <form action="index.php" method="POST" id="reply-edit-form-<?= $repId ?>" style="display: none; margin-bottom: 10px;">
-
             <input type="hidden" name="action" value="edit_reply">
-
             <input type="hidden" name="reply_id" value="<?= $repId ?>">
-
-            <textarea name="content" class="reply-textarea" style="width: 100%; min-height: 60px; margin-bottom: 8px;" required><?= e($rep['content']) ?></textarea>
-
-            <div style="display: flex; gap: 8px;">
-
-              <button type="submit" class="btn-post-reply" style="padding: 5px 14px; font-size: 12px;">Save</button>
-
-              <button type="button" class="btn-modal-cancel" style="padding: 5px 14px; font-size: 12px;" onclick="toggleEditReplyForm(<?= $repId ?>)">Cancel</button>
-
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 4px;">
+              <?php render_format_toolbar(); ?>
             </div>
-
+            <textarea name="content" class="reply-textarea" style="width: 100%; min-height: 60px; margin-bottom: 8px;" required><?= e($rep['content']) ?></textarea>
+            <div style="display: flex; gap: 8px;">
+              <button type="submit" class="btn-post-reply" style="padding: 5px 14px; font-size: 12px;">Save</button>
+              <button type="button" class="btn-modal-cancel" style="padding: 5px 14px; font-size: 12px;" onclick="toggleEditReplyForm(<?= $repId ?>)">Cancel</button>
+            </div>
           </form>
-
         <?php endif; ?>
 
 
@@ -203,15 +213,21 @@ function renderReplyNode(array $rep, array $childrenByParent, array $repliesById
 
             <textarea name="content" class="reply-textarea" style="width: 100%; min-height: 55px; margin-bottom: 8px;" placeholder="Replying to @<?= e($rep['author_username']) ?>..." required></textarea>
 
-            <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
 
-              <label class="btn-attach-image" style="cursor: pointer; font-size: 12px; color: var(--primary-blue);">
+              <div style="display: flex; align-items: center; gap: 4px;">
 
-                <span>Photo</span>
+                <?php render_format_toolbar(); ?>
 
-                <input type="file" name="reply_image" accept="image/*" style="display: none;">
+                <label class="btn-attach-image" style="cursor: pointer; font-size: 12px; color: var(--primary-blue);">
 
-              </label>
+                  <span>Photo</span>
+
+                  <input type="file" name="reply_image" accept="image/*" style="display: none;">
+
+                </label>
+
+              </div>
 
               <div style="display: flex; gap: 8px;">
 
@@ -2554,6 +2570,8 @@ HTML PART starts here
 
                 <div class="composer-tools">
 
+                  <?php render_format_toolbar(); ?>
+
                   <button type="button" class="composer-tool-btn" title="Add Photos">
 
                     <svg viewBox="0 0 24 24" fill="currentColor">
@@ -2631,6 +2649,8 @@ HTML PART starts here
               <div class="composer-bottom-bar">
 
                 <div class="composer-tools">
+
+                  <?php render_format_toolbar(); ?>
 
                   <button type="button" class="composer-tool-btn" title="Add Photos">
 
@@ -2879,7 +2899,7 @@ HTML PART starts here
 
                 <!-- Post Content Text -->
 
-                <p class="post-body-text"><?= nl2br(e($post['content'])) ?></p>
+                <p class="post-body-text"><?= format_post_content($post['content']) ?></p>
 
 
 
@@ -2981,19 +3001,25 @@ HTML PART starts here
 
 
 
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-subtle);">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-subtle); flex-wrap: wrap; gap: 6px;">
 
-                          <label for="reply-image-input-<?= $postId ?>" style="cursor: pointer; color: var(--primary-blue); display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 600;">
+                          <div style="display: flex; align-items: center; gap: 4px;">
 
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                            <?php render_format_toolbar(); ?>
 
-                              <path d="M3 5.5C3 4.119 4.119 3 5.5 3h13C19.881 3 21 4.119 21 5.5v13c0 1.381-1.119 2.5-2.5 2.5h-13C4.119 21 3 19.881 3 18.5v-13zM5.5 5c-.276 0-.5.224-.5.5v9.086l3.293-3.293a1 1 0 0 1 1.414 0l4 4a1 1 0 0 1 0 1.414l-1.293 1.293H18.5c.276 0 .5-.224.5-.5V5.5c0-.276-.224-.5-.5-.5h-13zM15 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/>
+                            <label for="reply-image-input-<?= $postId ?>" style="cursor: pointer; color: var(--primary-blue); display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 600;">
 
-                            </svg>
+                              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
 
-                            <span>Add Photo</span>
+                                <path d="M3 5.5C3 4.119 4.119 3 5.5 3h13C19.881 3 21 4.119 21 5.5v13c0 1.381-1.119 2.5-2.5 2.5h-13C4.119 21 3 19.881 3 18.5v-13zM5.5 5c-.276 0-.5.224-.5.5v9.086l3.293-3.293a1 1 0 0 1 1.414 0l4 4a1 1 0 0 1 0 1.414l-1.293 1.293H18.5c.276 0 .5-.224.5-.5V5.5c0-.276-.224-.5-.5-.5h-13zM15 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/>
 
-                          </label>
+                              </svg>
+
+                              <span>Add Photo</span>
+
+                            </label>
+
+                          </div>
 
                           <input type="file" name="reply_image" id="reply-image-input-<?= $postId ?>" accept="image/*" style="display: none;" onchange="previewReplyImage(this, <?= $postId ?>)">
 
@@ -3383,8 +3409,9 @@ HTML PART starts here
           <!-- Title Input -->
           <input type="text" name="title" id="post-title" class="x-compose-title-input" placeholder="Title of your discussion..." required>
 
-          <!-- Main Textarea -->
-          <textarea name="content" id="post-content" class="x-compose-textarea" placeholder="What’s happening?" required></textarea>
+          <!-- Main Visual Rich Editor -->
+          <textarea name="content" id="post-content" style="display: none;"></textarea>
+          <div class="x-compose-textarea rich-editor" id="post-content-editor" contenteditable="true" data-sync="post-content" data-placeholder="What’s happening?" role="textbox" aria-multiline="true"></div>
 
           <!-- Previews for selected photos -->
           <div class="image-preview-strip" id="create-image-previews"></div>
@@ -3398,6 +3425,8 @@ HTML PART starts here
       <div class="x-compose-bottom-toolbar">
 
         <div class="x-toolbar-icons">
+
+          <?php render_format_toolbar('post-content'); ?>
 
           <button type="button" class="x-tool-btn" onclick="document.getElementById('post-images-input').click()" title="Add photos">
 
@@ -3515,9 +3544,13 @@ HTML PART starts here
 
         <div class="form-group">
 
-          <label class="form-label" for="edit-post-content">Discussion Content</label>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 4px;">
+            <label class="form-label" for="edit-post-content" style="margin-bottom: 0;">Discussion Content</label>
+            <?php render_format_toolbar('edit-post-content'); ?>
+          </div>
 
-          <textarea name="content" id="edit-post-content" class="form-textarea" required></textarea>
+          <textarea name="content" id="edit-post-content" style="display: none;"></textarea>
+          <div class="form-textarea rich-editor" id="edit-post-content-editor" contenteditable="true" data-sync="edit-post-content" data-placeholder="Discussion content..." role="textbox" aria-multiline="true"></div>
 
         </div>
 
@@ -4273,101 +4306,61 @@ function closeEditPostModal() {
 
   if (modal) modal.classList.remove('active');
 
-}
+  const editEditor = document.getElementById('edit-post-content-editor');
 
+  if (editEditor) {
 
+    editEditor.innerHTML = '';
 
-function handleEditImageSelection(input) {
-
-  const previewContainer = document.getElementById('edit-image-previews');
-
-  if (!previewContainer) return;
-
-  previewContainer.innerHTML = '';
-
-
-
-  const files = Array.from(input.files);
-
-  files.slice(0, 4).forEach((file) => {
-
-    if (!file.type.startsWith('image/')) return;
-
-    const reader = new window.FileReader();
-
-    reader.onload = (e) => {
-
-      const thumb = document.createElement('div');
-
-      thumb.className = 'preview-thumb-container';
-
-      thumb.style.cssText = 'position: relative; width: 70px; height: 70px; border-radius: 8px; overflow: hidden; display: inline-block; margin-right: 8px; margin-top: 8px; border: 1px solid var(--border-color);';
-
-      thumb.innerHTML = `
-
-        <img src="${e.target.result}" alt="Preview" style="width: 100%; height: 100%; object-fit: cover;">
-
-        <button type="button" class="btn-remove-thumb" onclick="removeSelectedEditFile(this)" style="position: absolute; top: 3px; right: 3px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,0.75); color: #fff; border: none; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
-
-      `;
-
-      previewContainer.appendChild(thumb);
-
-    };
-
-    reader.readAsDataURL(file);
-
-  });
-
-}
-
-
-
-function removeSelectedEditFile(btn) {
-
-  btn.closest('.preview-thumb-container').remove();
-
-  const previewContainer = document.getElementById('edit-image-previews');
-
-  if (previewContainer && previewContainer.children.length === 0) {
-
-    const fileInput = document.getElementById('edit-images-input');
-
-    if (fileInput) fileInput.value = '';
+    if (typeof syncRichEditor === 'function') syncRichEditor(editEditor);
 
   }
 
 }
 
+function handleEditImageSelection(input) {
+  const previewContainer = document.getElementById('edit-image-previews');
+  if (!previewContainer) return;
+  previewContainer.innerHTML = '';
+  const files = Array.from(input.files);
+  files.slice(0, 4).forEach((file) => {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new window.FileReader();
+    reader.onload = (e) => {
+      const thumb = document.createElement('div');
+      thumb.className = 'preview-thumb-container';
+      thumb.style.cssText = 'position: relative; width: 70px; height: 70px; border-radius: 8px; overflow: hidden; display: inline-block; margin-right: 8px; margin-top: 8px; border: 1px solid var(--border-color);';
+      thumb.innerHTML = `
+        <img src="${e.target.result}" alt="Preview" style="width: 100%; height: 100%; object-fit: cover;">
+        <button type="button" class="btn-remove-thumb" onclick="removeSelectedEditFile(this)" style="position: absolute; top: 3px; right: 3px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,0.75); color: #fff; border: none; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
+      `;
+      previewContainer.appendChild(thumb);
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
+function removeSelectedEditFile(btn) {
+  btn.closest('.preview-thumb-container').remove();
+  const previewContainer = document.getElementById('edit-image-previews');
+  if (previewContainer && previewContainer.children.length === 0) {
+    const fileInput = document.getElementById('edit-images-input');
+    if (fileInput) fileInput.value = '';
+  }
+}
 
 window.handlePostCardClick = handlePostCardClick;
-
 window.toggleRepliesSection = toggleRepliesSection;
-
 window.toggleEditReplyForm = toggleEditReplyForm;
-
 window.toggleNestedComposer = toggleNestedComposer;
-
 window.togglePostMenu = togglePostMenu;
-
 window.openEditPostModal = openEditPostModal;
-
 window.closeEditPostModal = closeEditPostModal;
-
 window.removeExistingImage = removeExistingImage;
-
 window.undoRemoveExistingImage = undoRemoveExistingImage;
-
 window.handleEditImageSelection = handleEditImageSelection;
-
 window.removeSelectedEditFile = removeSelectedEditFile;
-
 </script>
-
 <script src="assets/js/main.js?v=<?= file_exists(__DIR__ . '/assets/js/main.js') ? filemtime(__DIR__ . '/assets/js/main.js') : time() ?>"></script>
-
 </body>
-
 </html>
-

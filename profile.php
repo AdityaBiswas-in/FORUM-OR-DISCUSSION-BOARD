@@ -938,7 +938,7 @@ HTML PART
 
 
 
-                <p class="post-body-text"><?= nl2br(e($post['content'])) ?></p>
+                <p class="post-body-text"><?= format_post_content($post['content']) ?></p>
 
 
 
@@ -1150,7 +1150,7 @@ HTML PART
 
                   <div class="reply-body-text" style="font-size: 14.5px; color: var(--text-main); line-height: 1.45; word-break: break-word;">
 
-                    <?= nl2br(e($rep['content'])) ?>
+                    <?= format_post_content($rep['content']) ?>
 
                   </div>
 

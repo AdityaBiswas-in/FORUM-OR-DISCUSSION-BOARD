@@ -1572,6 +1572,136 @@ img, svg {
   gap: 4px;
 }
 
+/* Post Format Toolbar (Bold, Italic, Strike, Super, Heading) */
+.format-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: transparent;
+  user-select: none;
+}
+
+.format-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  font-family: inherit;
+}
+
+.format-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-main);
+}
+
+.format-btn .fmt-b {
+  font-weight: 800;
+  font-size: 15px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1;
+}
+
+.format-btn .fmt-i {
+  font-style: italic;
+  font-family: "Georgia", "Times New Roman", serif;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.format-btn .fmt-s {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+
+.format-btn .fmt-sup {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.format-btn .fmt-sup sup {
+  font-size: 9.5px;
+  font-weight: 700;
+  top: -0.45em;
+  position: relative;
+}
+
+.format-btn .fmt-heading {
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+
+.format-divider {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  background: var(--border-color);
+  margin: 0 6px;
+}
+
+/* Rich Content Editable Editors */
+.rich-editor {
+  min-height: 110px;
+  max-height: 380px;
+  overflow-y: auto;
+  outline: none;
+  cursor: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  color: var(--text-main);
+}
+
+.rich-editor:focus {
+  outline: none;
+}
+
+.rich-editor:empty::before,
+.rich-editor[data-empty="true"]::before {
+  content: attr(data-placeholder);
+  color: var(--text-muted);
+  pointer-events: none;
+  display: block;
+}
+
+.rich-editor h3 {
+  font-size: 1.25em;
+  font-weight: 700;
+  margin: 6px 0;
+  color: var(--text-main);
+}
+
+.rich-editor b,
+.rich-editor strong {
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.rich-editor i,
+.rich-editor em {
+  font-style: italic;
+}
+
+.rich-editor s,
+.rich-editor strike,
+.rich-editor del {
+  text-decoration: line-through;
+}
+
 .x-tool-btn {
   color: var(--primary-blue);
   width: 36px;

@@ -35,8 +35,6 @@ CREATE TABLE `students` (
   UNIQUE KEY `idx_students_email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-
-
 -- ============================================================
 -- 3. Table: admins
 -- Dedicated storage for System Administrator accounts
@@ -53,8 +51,6 @@ CREATE TABLE `admins` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `idx_admins_email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-
 
 -- ============================================================
 -- 5. Table: users

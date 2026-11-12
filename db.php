@@ -23,6 +23,32 @@ if (!function_exists('e')) {
     }
 }
 
+// Helper: Format post and reply text with safe rich text (Bold, Italic, Strikethrough, Headings) & Markdown fallback
+if (!function_exists('format_post_content')) {
+    function format_post_content(?string $str = ''): string {
+        if ($str === null || $str === '') return '';
+
+        // If string contains HTML tags from visual rich editor
+        if (preg_match('/<[a-z][\s\S]*>/i', $str)) {
+            $allowedTags = '<b><strong><i><em><s><del><strike><u><h3><h4><p><br><div><span><blockquote><ul><ol><li>';
+            $safe = strip_tags($str, $allowedTags);
+            // Strip any malicious script/event attributes
+            $safe = preg_replace('/\s+on\w+\s*=\s*(["\']).*?\1/i', '', $safe);
+            $safe = preg_replace('/javascript:/i', '', $safe);
+            $safe = preg_replace('/\s+style\s*=\s*(["\']).*?\1/i', '', $safe);
+            return $safe;
+        }
+
+        // Markdown fallback
+        $safe = htmlspecialchars($str, ENT_QUOTES, 'UTF-8');
+        $safe = preg_replace('/^(#{1,3})\s+(.+)$/m', '<strong class="post-heading" style="font-size: 1.15em; display: inline-block; margin: 4px 0;">$2</strong>', $safe);
+        $safe = preg_replace('/\*\*(.+?)\*\*/s', '<strong>$1</strong>', $safe);
+        $safe = preg_replace('/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/s', '<em>$1</em>', $safe);
+        $safe = preg_replace('/~~(.+?)~~/s', '<del>$1</del>', $safe);
+        return nl2br($safe);
+    }
+}
+
 // Helper: Check if user is logged in
 if (!function_exists('is_logged_in')) {
     function is_logged_in(): bool {

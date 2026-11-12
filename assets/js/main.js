@@ -159,6 +159,11 @@ function openCreateThreadModal(groupId) {
 function closeCreateThreadModal() {
   const modal = document.getElementById('create-thread-modal');
   if (modal) modal.classList.remove('active');
+  const editor = document.getElementById('post-content-editor');
+  if (editor) {
+    editor.innerHTML = '';
+    if (typeof syncRichEditor === 'function') syncRichEditor(editor);
+  }
 }
 
 function openEditPostModal(idOrBtn, title, content) {
@@ -187,6 +192,11 @@ function openEditPostModal(idOrBtn, title, content) {
   document.getElementById('edit-post-id').value = id || '';
   document.getElementById('edit-post-title').value = title || '';
   document.getElementById('edit-post-content').value = content || '';
+  const editEditor = document.getElementById('edit-post-content-editor');
+  if (editEditor) {
+    editEditor.innerHTML = content || '';
+    if (typeof syncRichEditor === 'function') syncRichEditor(editEditor);
+  }
   
   // Remove any previously appended delete_image_ids hidden inputs
   const form = document.getElementById('edit-post-form');
@@ -863,6 +873,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const groupVal = postGroupInput ? postGroupInput.value.trim() : '';
       const titleInput = document.getElementById('post-title');
       const contentInput = document.getElementById('post-content');
+      const postEditor = document.getElementById('post-content-editor');
+      if (postEditor && typeof syncRichEditor === 'function') {
+        syncRichEditor(postEditor);
+      }
       const submitBtn = document.getElementById('btn-submit-post');
       const trigger = document.getElementById('group-picker-trigger');
       const groupErr = document.getElementById('create-post-group-error');
@@ -942,3 +956,177 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
+
+// ========================================================
+// Visual Rich Post Composer Formatting Engine (WYSIWYG Bold, Italic, Strike, Heading)
+// ========================================================
+
+function syncRichEditor(editor) {
+  if (!editor) return;
+  const targetId = editor.getAttribute('data-sync');
+  let textarea = targetId ? document.getElementById(targetId) : null;
+  if (!textarea && editor.parentElement) {
+    textarea = editor.parentElement.querySelector('textarea');
+  }
+  if (!textarea) return;
+
+  const text = editor.innerText.trim();
+  if (text.length === 0) {
+    textarea.value = '';
+    editor.setAttribute('data-empty', 'true');
+  } else {
+    textarea.value = editor.innerHTML;
+    editor.removeAttribute('data-empty');
+  }
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function getActiveRichEditor(toolbar) {
+  // 1. Check focused element
+  const active = document.activeElement;
+  if (active && active.classList.contains('rich-editor')) return active;
+
+  // 2. Check toolbar data-target
+  if (toolbar) {
+    const targetId = toolbar.getAttribute('data-target');
+    if (targetId) {
+      const editor = document.getElementById(targetId + '-editor') || document.getElementById(targetId);
+      if (editor && editor.classList.contains('rich-editor')) return editor;
+    }
+    const container = toolbar.closest('form') || toolbar.closest('.x-compose-dialog') || toolbar.closest('.modal-dialog');
+    if (container) {
+      const editor = container.querySelector('.rich-editor');
+      if (editor) return editor;
+    }
+  }
+
+  // 3. Fallback to open modals
+  const activeModal = document.querySelector('.modal-overlay.active');
+  if (activeModal) {
+    const editor = activeModal.querySelector('.rich-editor');
+    if (editor) return editor;
+  }
+
+  return document.getElementById('post-content-editor');
+}
+
+function applyVisualFormat(editor, formatType) {
+  if (!editor) return;
+  editor.focus();
+
+  const selection = window.getSelection();
+  const hasSelection = (selection && !selection.isCollapsed && selection.toString().length > 0);
+
+  if (formatType === 'heading') {
+    let inHeading = false;
+    if (selection && selection.anchorNode) {
+      const parent = selection.anchorNode.nodeType === 1 ? selection.anchorNode : selection.anchorNode.parentElement;
+      if (parent && parent.closest('h1, h2, h3, h4, h5, h6')) inHeading = true;
+    }
+    if (inHeading) {
+      document.execCommand('formatBlock', false, '<p>');
+    } else {
+      if (!hasSelection) {
+        document.execCommand('insertHTML', false, '<h3>Heading</h3>');
+      } else {
+        document.execCommand('formatBlock', false, '<h3>');
+      }
+    }
+  } else if (formatType === 'bold') {
+    if (!hasSelection) {
+      document.execCommand('insertHTML', false, '<b>bold text</b>');
+    } else {
+      document.execCommand('bold', false, null);
+    }
+  } else if (formatType === 'italic') {
+    if (!hasSelection) {
+      document.execCommand('insertHTML', false, '<i>italic text</i>');
+    } else {
+      document.execCommand('italic', false, null);
+    }
+  } else if (formatType === 'strike') {
+    if (!hasSelection) {
+      document.execCommand('insertHTML', false, '<s>strikethrough text</s>');
+    } else {
+      document.execCommand('strikeThrough', false, null);
+    }
+  }
+
+  syncRichEditor(editor);
+}
+
+// Prevent format buttons from stealing selection focus on mousedown
+document.addEventListener('mousedown', (e) => {
+  const btn = e.target.closest('.format-btn');
+  if (btn) {
+    e.preventDefault();
+  }
+});
+
+// Click listener for format buttons
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.format-btn');
+  if (!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+
+  const toolbar = btn.closest('.format-toolbar');
+  const format = btn.getAttribute('data-format');
+
+  // Quick composer trigger
+  if (toolbar && toolbar.closest('.x-quick-composer')) {
+    if (typeof openCreateThreadModal === 'function') {
+      openCreateThreadModal();
+      setTimeout(() => {
+        const editor = document.getElementById('post-content-editor');
+        if (editor) applyVisualFormat(editor, format);
+      }, 100);
+      return;
+    }
+  }
+
+  const editor = getActiveRichEditor(toolbar);
+  if (editor && editor.classList.contains('rich-editor')) {
+    applyVisualFormat(editor, format);
+    return;
+  }
+
+  // Plain textarea fallback if used outside rich-editor
+  const targetId = toolbar ? toolbar.getAttribute('data-target') : null;
+  const textarea = targetId ? document.getElementById(targetId) : (toolbar ? toolbar.closest('form')?.querySelector('textarea') : null);
+  if (textarea) {
+    const start = textarea.selectionStart ?? 0;
+    const end = textarea.selectionEnd ?? 0;
+    const val = textarea.value;
+    const selected = val.substring(start, end);
+    const wrap = { bold: ['**', '**'], italic: ['*', '*'], strike: ['~~', '~~'], heading: ['## ', ''] }[format] || ['**', '**'];
+    const replacement = selected.length > 0 ? (wrap[0] + selected + wrap[1]) : (wrap[0] + format + ' text' + wrap[1]);
+    textarea.value = val.substring(0, start) + replacement + val.substring(end);
+    textarea.focus();
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+});
+
+// Synchronize rich-editor elements on input, keyup, paste, and blur
+document.addEventListener('input', (e) => {
+  if (e.target && e.target.classList.contains('rich-editor')) {
+    syncRichEditor(e.target);
+  }
+});
+
+document.addEventListener('blur', (e) => {
+  if (e.target && e.target.classList.contains('rich-editor')) {
+    syncRichEditor(e.target);
+  }
+}, true);
+
+// Ensure forms sync editors before submit
+document.addEventListener('submit', (e) => {
+  const form = e.target;
+  if (form) {
+    form.querySelectorAll('.rich-editor').forEach(syncRichEditor);
+  }
+});
+
+window.syncRichEditor = syncRichEditor;
+window.applyVisualFormat = applyVisualFormat;
