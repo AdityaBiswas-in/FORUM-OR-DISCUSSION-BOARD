@@ -3450,15 +3450,32 @@ HTML PART starts here
 
         <div class="form-group">
 
-          <label class="form-label" for="new-group-status">Initial Status</label>
+          <label class="form-label">Initial Status</label>
 
-          <select name="status" id="new-group-status" class="form-input">
-
-            <option value="active">Active (Students can join and publish discussions)</option>
-
-            <option value="restricted">Restricted (Discussions paused)</option>
-
-          </select>
+          <div class="admin-status-dropdown modal-status-dropdown" data-modal-status-dropdown>
+            <input type="hidden" name="status" id="new-group-status" value="active">
+            <button type="button" class="admin-status-trigger modal-status-trigger" aria-haspopup="listbox" aria-expanded="false">
+              <span class="modal-status-trigger-left">
+                <span class="admin-status-dot dot-active" data-status-dot></span>
+                <span class="admin-status-label" data-status-label>Active (Students can join and publish discussions)</span>
+              </span>
+              <svg class="admin-status-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+            <div class="admin-status-menu modal-status-menu" role="listbox" aria-label="Initial Status">
+              <button type="button" class="admin-status-option active" role="option" aria-selected="true" data-value="active" data-label="Active (Students can join and publish discussions)" data-dot="dot-active">
+                <span class="admin-status-dot dot-active"></span>
+                <span class="admin-status-option-text">Active (Students can join and publish discussions)</span>
+                <svg class="admin-status-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </button>
+              <button type="button" class="admin-status-option" role="option" aria-selected="false" data-value="restricted" data-label="Restricted (Discussions paused)" data-dot="dot-restricted">
+                <span class="admin-status-dot dot-restricted"></span>
+                <span class="admin-status-option-text">Restricted (Discussions paused)</span>
+                <svg class="admin-status-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </button>
+            </div>
+          </div>
 
         </div>
 
@@ -3558,15 +3575,32 @@ HTML PART starts here
 
         <div class="form-group">
 
-          <label class="form-label" for="edit-group-status">Group Status</label>
+          <label class="form-label">Group Status</label>
 
-          <select name="status" id="edit-group-status" class="form-input">
-
-            <option value="active">Active (Open for discussions)</option>
-
-            <option value="restricted">Restricted (Paused for posting)</option>
-
-          </select>
+          <div class="admin-status-dropdown modal-status-dropdown" data-modal-status-dropdown>
+            <input type="hidden" name="status" id="edit-group-status" value="active">
+            <button type="button" class="admin-status-trigger modal-status-trigger" aria-haspopup="listbox" aria-expanded="false">
+              <span class="modal-status-trigger-left">
+                <span class="admin-status-dot dot-active" data-status-dot></span>
+                <span class="admin-status-label" data-status-label>Active (Open for discussions)</span>
+              </span>
+              <svg class="admin-status-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+            <div class="admin-status-menu modal-status-menu" role="listbox" aria-label="Group Status">
+              <button type="button" class="admin-status-option active" role="option" aria-selected="true" data-value="active" data-label="Active (Open for discussions)" data-dot="dot-active">
+                <span class="admin-status-dot dot-active"></span>
+                <span class="admin-status-option-text">Active (Open for discussions)</span>
+                <svg class="admin-status-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </button>
+              <button type="button" class="admin-status-option" role="option" aria-selected="false" data-value="restricted" data-label="Restricted (Paused for posting)" data-dot="dot-restricted">
+                <span class="admin-status-dot dot-restricted"></span>
+                <span class="admin-status-option-text">Restricted (Paused for posting)</span>
+                <svg class="admin-status-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </button>
+            </div>
+          </div>
 
         </div>
 
@@ -3765,7 +3799,12 @@ function openEditGroupModal(id, name, desc, status) {
 
   if (descInput) descInput.value = desc;
 
-  if (statusInput) statusInput.value = status;
+  if (statusInput) {
+    statusInput.value = status;
+    if (typeof window.syncModalStatusDropdown === 'function') {
+      window.syncModalStatusDropdown('edit-group-status', status);
+    }
+  }
 
   const m = document.getElementById('edit-group-modal');
 

@@ -1,6 +1,9 @@
 <?php
 // db.php - Database connection & session setup
 
+// Ensure PHP and MySQL share the same local timezone (+05:30 / Asia/Kolkata)
+date_default_timezone_set('Asia/Kolkata');
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -11,6 +14,7 @@ if ($conn->connect_error) {
     die("Database Connection Failed: " . $conn->connect_error);
 }
 $conn->set_charset("utf8mb4");
+$conn->query("SET time_zone = '+05:30'");
 
 // Helper: Escape HTML output to prevent XSS
 if (!function_exists('e')) {

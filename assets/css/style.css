@@ -4820,3 +4820,36 @@ select:focus-visible {
   color: var(--text-muted);
   letter-spacing: 0.01em;
 }
+
+/* Full-width Modal Status Dropdown */
+.modal-status-dropdown {
+  width: 100%;
+}
+
+.modal-status-trigger {
+  width: 100%;
+  height: 42px;
+  justify-content: space-between;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.modal-status-trigger-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.modal-status-trigger .admin-status-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modal-status-menu {
+  left: 0;
+  right: 0;
+  width: 100%;
+}

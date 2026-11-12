@@ -718,6 +718,67 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Custom Modal Status Dropdowns (Create & Edit Group Modals)
+  const syncModalDropdown = (dropdown, value) => {
+    const hiddenInput = dropdown.querySelector('input[type="hidden"]');
+    const triggerLabel = dropdown.querySelector('[data-status-label]');
+    const triggerDot = dropdown.querySelector('[data-status-dot]');
+    const options = dropdown.querySelectorAll('.admin-status-option');
+    let matched = null;
+    options.forEach((opt) => {
+      const isSelected = opt.getAttribute('data-value') === value;
+      opt.classList.toggle('active', isSelected);
+      opt.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+      if (isSelected) matched = opt;
+    });
+    if (matched) {
+      if (hiddenInput) hiddenInput.value = value;
+      if (triggerLabel) triggerLabel.textContent = matched.getAttribute('data-label') || '';
+      if (triggerDot) triggerDot.className = 'admin-status-dot ' + (matched.getAttribute('data-dot') || 'dot-active');
+    }
+  };
+
+  window.syncModalStatusDropdown = (inputId, value) => {
+    const input = document.getElementById(inputId);
+    const dropdown = input ? input.closest('[data-modal-status-dropdown]') : null;
+    if (dropdown) syncModalDropdown(dropdown, value);
+  };
+
+  document.querySelectorAll('[data-modal-status-dropdown]').forEach((dropdown) => {
+    const trigger = dropdown.querySelector('.admin-status-trigger');
+    const options = dropdown.querySelectorAll('.admin-status-option');
+    if (!trigger) return;
+
+    const closeMenu = () => {
+      dropdown.classList.remove('open');
+      trigger.setAttribute('aria-expanded', 'false');
+    };
+
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = dropdown.classList.toggle('open');
+      trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    });
+
+    options.forEach((opt) => {
+      opt.addEventListener('click', () => {
+        syncModalDropdown(dropdown, opt.getAttribute('data-value') || 'active');
+        closeMenu();
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!dropdown.contains(e.target)) closeMenu();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && dropdown.classList.contains('open')) {
+        closeMenu();
+        trigger.focus();
+      }
+    });
+  });
+
   // Admin Console: Live Moderation Post Search
   const adminPostsSearch = document.getElementById('admin-posts-search');
   const adminPostsTable = document.getElementById('admin-posts-table');
