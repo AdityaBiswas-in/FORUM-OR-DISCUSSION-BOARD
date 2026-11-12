@@ -73,14 +73,45 @@ function toggleProfileDropdown(e) {
 }
 
 // 5. Modals Management
-function openCreateThreadModal() {
+function updateComposerGroupIcon() {
+  const select = document.getElementById('post-group-id');
+  const iconWrap = document.getElementById('composer-selected-group-icon');
+  if (!select || !iconWrap) return;
+
+  const opt = select.options[select.selectedIndex];
+  const imgUrl = opt ? (opt.getAttribute('data-image') || '') : '';
+  if (imgUrl) {
+    iconWrap.innerHTML = `<img src="${imgUrl.replace(/"/g, '&quot;')}" alt="">`;
+  } else {
+    iconWrap.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>`;
+  }
+}
+
+function clearCreatePostErrors() {
+  const wrap = document.getElementById('composer-group-wrap');
+  const errEl = document.getElementById('create-post-group-error');
+  const fbEl = document.getElementById('create-post-form-feedback');
+  if (wrap) wrap.classList.remove('has-error');
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+  if (fbEl) { fbEl.style.display = 'none'; fbEl.textContent = ''; fbEl.classList.remove('is-success'); }
+}
+
+function openCreateThreadModal(groupId) {
   const modal = document.getElementById('create-thread-modal');
   if (modal) {
+    clearCreatePostErrors();
+    const select = document.getElementById('post-group-id');
+    if (select && groupId) {
+      select.value = String(groupId);
+    }
+    updateComposerGroupIcon();
     modal.classList.add('active');
     setTimeout(() => {
       const input = document.getElementById('post-title');
       if (input) input.focus();
     }, 100);
+  } else {
+    window.location.href = 'register.php';
   }
 }
 
@@ -388,6 +419,10 @@ function toggleLikePost(e, postId) {
   })
   .then(res => res.json())
   .then(data => {
+    if (data.redirect) {
+      window.location.href = data.redirect;
+      return;
+    }
     if (data.success) {
       if (data.liked) {
         btn.classList.add('active-liked');
@@ -526,5 +561,158 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof openEditProfileModal === 'function') {
       setTimeout(() => openEditProfileModal(), 200);
     }
+  }
+
+  // Admin Console: Live Group Filter
+  const adminGroupsSearch = document.getElementById('admin-groups-search');
+  const adminGroupsStatus = document.getElementById('admin-groups-status-filter');
+  const adminGroupsTable = document.getElementById('admin-groups-table');
+  if (adminGroupsTable && (adminGroupsSearch || adminGroupsStatus)) {
+    const filterAdminGroups = () => {
+      const q = (adminGroupsSearch ? adminGroupsSearch.value : '').trim().toLowerCase();
+      const status = adminGroupsStatus ? adminGroupsStatus.value : 'all';
+      adminGroupsTable.querySelectorAll('.admin-group-row, tbody tr').forEach((row) => {
+        const text = row.textContent.toLowerCase();
+        const rowStatus = row.getAttribute('data-status') || '';
+        const matchesText = !q || text.includes(q);
+        const matchesStatus = status === 'all' || rowStatus === status;
+        row.style.display = (matchesText && matchesStatus) ? '' : 'none';
+      });
+    };
+    if (adminGroupsSearch) adminGroupsSearch.addEventListener('input', filterAdminGroups);
+    if (adminGroupsStatus) adminGroupsStatus.addEventListener('change', filterAdminGroups);
+  }
+
+  // Admin Console: Live Moderation Post Search
+  const adminPostsSearch = document.getElementById('admin-posts-search');
+  const adminPostsTable = document.getElementById('admin-posts-table');
+  if (adminPostsSearch && adminPostsTable) {
+    adminPostsSearch.addEventListener('input', () => {
+      const q = adminPostsSearch.value.trim().toLowerCase();
+      adminPostsTable.querySelectorAll('tbody tr').forEach((row) => {
+        row.style.display = (!q || row.textContent.toLowerCase().includes(q)) ? '' : 'none';
+      });
+    });
+  }
+
+  // Admin Subnav Active State
+  const subnavLinks = document.querySelectorAll('.admin-subnav-link');
+  subnavLinks.forEach((link) => {
+    link.addEventListener('click', () => {
+      subnavLinks.forEach((l) => l.classList.remove('active'));
+      link.classList.add('active');
+    });
+  });
+
+  // Groups Directory: Live Search
+  const groupsSearch = document.getElementById('groups-directory-search');
+  const groupsGrid = document.getElementById('groups-directory-grid');
+  if (groupsSearch && groupsGrid) {
+    groupsSearch.addEventListener('input', () => {
+      const q = groupsSearch.value.trim().toLowerCase();
+      groupsGrid.querySelectorAll('.group-card').forEach((card) => {
+        card.style.display = (!q || card.textContent.toLowerCase().includes(q)) ? '' : 'none';
+      });
+    });
+  }
+
+  // Create Post Modal: Group selection, validation & AJAX submit
+  const createPostForm = document.getElementById('create-post-form');
+  const postGroupSelect = document.getElementById('post-group-id');
+  if (postGroupSelect) {
+    updateComposerGroupIcon();
+    postGroupSelect.addEventListener('change', () => {
+      updateComposerGroupIcon();
+      clearCreatePostErrors();
+    });
+  }
+
+  if (createPostForm) {
+    createPostForm.setAttribute('novalidate', 'novalidate');
+    createPostForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (createPostForm.dataset.submitting === '1') return;
+
+      clearCreatePostErrors();
+      const groupVal = postGroupSelect ? postGroupSelect.value.trim() : '';
+      const titleInput = document.getElementById('post-title');
+      const contentInput = document.getElementById('post-content');
+      const submitBtn = document.getElementById('btn-submit-post');
+      const wrap = document.getElementById('composer-group-wrap');
+      const groupErr = document.getElementById('create-post-group-error');
+      const feedbackEl = document.getElementById('create-post-form-feedback');
+
+      if (!groupVal) {
+        if (wrap) wrap.classList.add('has-error');
+        if (groupErr) {
+          groupErr.textContent = 'Please select a group before publishing your discussion.';
+          groupErr.style.display = 'block';
+        }
+        if (postGroupSelect) postGroupSelect.focus();
+        return;
+      }
+
+      if (!titleInput || !titleInput.value.trim() || !contentInput || !contentInput.value.trim()) {
+        if (feedbackEl) {
+          feedbackEl.textContent = 'Please enter both a discussion title and content.';
+          feedbackEl.style.display = 'block';
+        }
+        if (titleInput && !titleInput.value.trim()) titleInput.focus();
+        else if (contentInput) contentInput.focus();
+        return;
+      }
+
+      createPostForm.dataset.submitting = '1';
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Publishing...';
+      }
+
+      try {
+        const res = await fetch(createPostForm.getAttribute('action') || 'index.php', {
+          method: 'POST',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+          body: new FormData(createPostForm)
+        });
+        const data = await res.json();
+
+        if (!data.success) {
+          if (data.field === 'group_id' && wrap && groupErr) {
+            wrap.classList.add('has-error');
+            groupErr.textContent = data.message || 'Please select a group before publishing your discussion.';
+            groupErr.style.display = 'block';
+          } else if (feedbackEl) {
+            feedbackEl.textContent = data.message || 'Unable to publish discussion. Please try again.';
+            feedbackEl.style.display = 'block';
+          }
+          createPostForm.dataset.submitting = '0';
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Post';
+          }
+          return;
+        }
+
+        if (feedbackEl) {
+          feedbackEl.classList.add('is-success');
+          feedbackEl.textContent = data.message || 'Discussion published!';
+          feedbackEl.style.display = 'block';
+        }
+        setTimeout(() => {
+          closeCreateThreadModal();
+          window.location.href = data.redirect || 'index.php';
+        }, 250);
+      } catch (err) {
+        if (feedbackEl) {
+          feedbackEl.textContent = 'Network error while publishing. Your text has been preserved.';
+          feedbackEl.style.display = 'block';
+        }
+        createPostForm.dataset.submitting = '0';
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Post';
+        }
+      }
+    });
   }
 });

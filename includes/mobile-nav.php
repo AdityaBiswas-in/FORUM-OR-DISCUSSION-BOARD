@@ -1,5 +1,5 @@
 <?php
-if (!isset($currentUser)) return;
+$currentUser = $currentUser ?? null;
 $currentFile = basename($_SERVER['PHP_SELF']);
 $isHomePage = ($currentFile === 'index.php');
 $isProfilePage = ($currentFile === 'profile.php');
@@ -13,7 +13,7 @@ $mobileSearchVal = trim($_GET['q'] ?? '');
 <header class="mobile-top-bar" id="mobile-top-bar">
   <div class="mobile-top-left">
     <button type="button" class="mobile-avatar-trigger" onclick="openMobileDrawer()" aria-label="Open navigation menu">
-      <img src="<?= e($currentUser['avatar']) ?>" alt="<?= e($currentUser['name']) ?>" class="mobile-avatar-head">
+      <img src="<?= e($currentUser['avatar'] ?? 'assets/images/avatar_default.svg') ?>" alt="<?= e($currentUser['name'] ?? 'Guest') ?>" class="mobile-avatar-head">
     </button>
   </div>
   
@@ -49,7 +49,7 @@ $mobileSearchVal = trim($_GET['q'] ?? '');
 <!-- ======================================================== -->
 <!-- X-STYLE MOBILE FLOATING ACTION BUTTON (POST FAB)         -->
 <!-- ======================================================== -->
-<button type="button" class="mobile-post-fab" onclick="handleMobilePostClick()" aria-label="Create Post" title="Create Discussion">
+<button type="button" class="mobile-post-fab" onclick="<?= $currentUser ? 'handleMobilePostClick()' : "window.location.href='register.php'" ?>" aria-label="Create Post" title="Create Discussion">
   <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
     <path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/>
   </svg>
@@ -102,7 +102,7 @@ $mobileSearchVal = trim($_GET['q'] ?? '');
     </a>
 
     <!-- Groups Tab -->
-    <a href="index.php?view=groups" class="mobile-nav-btn <?= (isset($_GET['view']) && $_GET['view'] === 'groups') ? 'active' : '' ?>" aria-label="Academic Groups">
+    <a href="index.php?view=groups" class="mobile-nav-btn <?= (isset($_GET['view']) && $_GET['view'] === 'groups') ? 'active' : '' ?>" aria-label="Groups">
       <div class="mobile-nav-icon-wrap">
         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -148,8 +148,8 @@ $mobileSearchVal = trim($_GET['q'] ?? '');
   <div class="mobile-drawer-top">
     <!-- User Info Header -->
     <div class="mobile-drawer-user-header">
-      <a href="profile.php?id=<?= (int)$currentUser['id'] ?>" class="mobile-drawer-avatar-link" onclick="closeMobileDrawer()">
-        <img src="<?= e($currentUser['avatar']) ?>" alt="<?= e($currentUser['name']) ?>" class="mobile-drawer-avatar">
+      <a href="<?= $currentUser ? 'profile.php?id=' . (int)$currentUser['id'] : 'register.php' ?>" class="mobile-drawer-avatar-link" onclick="closeMobileDrawer()">
+        <img src="<?= e($currentUser['avatar'] ?? 'assets/images/avatar_default.svg') ?>" alt="<?= e($currentUser['name'] ?? 'Guest') ?>" class="mobile-drawer-avatar">
       </a>
       <button type="button" class="mobile-drawer-close-btn" onclick="closeMobileDrawer()" aria-label="Close menu">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -161,16 +161,16 @@ $mobileSearchVal = trim($_GET['q'] ?? '');
 
     <div class="mobile-drawer-user-meta">
       <div class="mobile-drawer-name-row" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-        <span class="mobile-drawer-name"><?= e($currentUser['name']) ?></span>
+        <span class="mobile-drawer-name"><?= e($currentUser['name'] ?? 'Guest Visitor') ?></span>
         <?php if (function_exists('is_admin') && is_admin()): ?>
           <span class="user-role-badge badge-admin" style="font-size: 10px; padding: 2px 7px;">Admin</span>
         <?php elseif (function_exists('is_faculty') && is_faculty()): ?>
           <span class="user-role-badge badge-faculty" style="font-size: 10px; padding: 2px 7px;">Faculty</span>
-        <?php else: ?>
+        <?php elseif ($currentUser): ?>
           <span class="user-role-badge badge-student" style="font-size: 10px; padding: 2px 7px;">Student</span>
         <?php endif; ?>
       </div>
-      <span class="mobile-drawer-handle"><?= !empty($currentUser['uid']) ? 'ID: ' . e($currentUser['uid']) : '@' . e($currentUser['username']) ?></span>
+      <span class="mobile-drawer-handle"><?= $currentUser ? (!empty($currentUser['uid']) ? 'ID: ' . e($currentUser['uid']) : '@' . e($currentUser['username'])) : 'Public Browsing Mode' ?></span>
     </div>
 
     <?php if (!empty($currentUser['bio'])): ?>
@@ -194,7 +194,7 @@ $mobileSearchVal = trim($_GET['q'] ?? '');
       <?php endif; ?>
 
       <!-- Option 1: Profile -->
-      <a href="profile.php?id=<?= (int)$currentUser['id'] ?>" class="mobile-drawer-item <?= $isProfilePage ? 'active' : '' ?>" onclick="closeMobileDrawer()">
+      <a href="<?= $currentUser ? 'profile.php?id=' . (int)$currentUser['id'] : 'register.php' ?>" class="mobile-drawer-item <?= $isProfilePage ? 'active' : '' ?>" onclick="closeMobileDrawer()">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
         </svg>
@@ -209,7 +209,7 @@ $mobileSearchVal = trim($_GET['q'] ?? '');
           <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
           <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
         </svg>
-        <span>Academic Groups</span>
+        <span>Groups</span>
       </a>
 
       <!-- Option 2: Post Option -->
@@ -253,6 +253,7 @@ $mobileSearchVal = trim($_GET['q'] ?? '');
   <!-- Drawer Footer (Sign Out) -->
   <div class="mobile-drawer-footer">
     <div class="mobile-drawer-divider"></div>
+    <?php if ($currentUser): ?>
     <a href="logout.php" class="mobile-drawer-item logout-link" style="color: var(--danger-red);">
       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
@@ -260,7 +261,10 @@ $mobileSearchVal = trim($_GET['q'] ?? '');
         <line x1="21" y1="12" x2="9" y2="12"></line>
       </svg>
       <span>Sign Out</span>
-    </a>
-  </div>
-
+    </a>
+    <?php else: ?>
+    <a href="register.php" class="mobile-drawer-item" style="color: var(--primary-blue); font-weight: 700;"><span>Create Account</span></a>
+    <a href="login.php" class="mobile-drawer-item" style="color: var(--text-main);"><span>Sign In</span></a>
+    <?php endif; ?>
+  </div>
 </aside>

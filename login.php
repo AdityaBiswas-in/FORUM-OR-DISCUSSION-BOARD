@@ -27,7 +27,7 @@ if ($registeredType === '1') {
     $success = 'You have signed out.';
 }
 
-$login_input = $registeredId ?: trim($_GET['username'] ?? '');
+$login_input = trim($_GET['email'] ?? '') ?: $registeredId ?: trim($_GET['username'] ?? '');
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $action = $_POST['action'] ?? 'login';
@@ -40,7 +40,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $input = trim($_POST['bypass_email'] ?? '');
 
         if ($login_role === 'student') {
-            $account = $conn->execute_query("SELECT * FROM students WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_assoc();
+            $account = $conn->execute_query("SELECT * FROM students WHERE email = ? LIMIT 1", [$input])->fetch_assoc();
             if ($account) {
                 $u = $conn->execute_query("SELECT id FROM users WHERE uid = ? OR email = ? LIMIT 1", [$account['id'], $account['email']])->fetch_assoc();
                 $userId = $u ? (int)$u['id'] : 0;
@@ -57,11 +57,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 exit;
             } else {
                 // Check if account belongs to another portal
-                $inOther = $conn->execute_query("SELECT 1 FROM faculty WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_row()
-                        || $conn->execute_query("SELECT 1 FROM admins WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_row();
+                $inOther = $conn->execute_query("SELECT 1 FROM faculty WHERE email = ? LIMIT 1", [$input])->fetch_row()
+                        || $conn->execute_query("SELECT 1 FROM admins WHERE email = ? LIMIT 1", [$input])->fetch_row();
                 $error = $inOther 
-                    ? "Invalid ID or account type. This account is not authorized to access this portal." 
-                    : "No student account found with the provided identifier.";
+                    ? "Invalid email or account type. This account is not authorized to access this portal." 
+                    : "No student account found with that email address.";
             }
         } elseif ($login_role === 'faculty') {
             $account = $conn->execute_query("SELECT * FROM faculty WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_assoc();
@@ -87,7 +87,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                     : "No faculty account found with the provided identifier.";
             }
         } elseif ($login_role === 'admin') {
-            $account = $conn->execute_query("SELECT * FROM admins WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_assoc();
+            $account = $conn->execute_query("SELECT * FROM admins WHERE email = ? LIMIT 1", [$input])->fetch_assoc();
             if ($account) {
                 $u = $conn->execute_query("SELECT id FROM users WHERE uid = ? OR email = ? LIMIT 1", [$account['id'], $account['email']])->fetch_assoc();
                 $userId = $u ? (int)$u['id'] : 0;
@@ -103,11 +103,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 header("Location: index.php?view=admin");
                 exit;
             } else {
-                $inOther = $conn->execute_query("SELECT 1 FROM students WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_row()
-                        || $conn->execute_query("SELECT 1 FROM faculty WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_row();
+                $inOther = $conn->execute_query("SELECT 1 FROM students WHERE email = ? LIMIT 1", [$input])->fetch_row()
+                        || $conn->execute_query("SELECT 1 FROM faculty WHERE email = ? LIMIT 1", [$input])->fetch_row();
                 $error = $inOther 
-                    ? "Invalid ID or account type. This account is not authorized to access this portal." 
-                    : "No administrator account found with the provided identifier.";
+                    ? "Invalid email or account type. This account is not authorized to access this portal." 
+                    : "No administrator account found with that email address.";
             }
         }
     } else {
@@ -118,8 +118,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         if ($login_input === '' || $password === '') {
             $error = 'Please fill in all fields.';
         } elseif ($login_role === 'student') {
-            // Authenticate against students table (supports 10-digit ID, Email, or Full Name)
-            $account = $conn->execute_query("SELECT * FROM students WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$login_input, $login_input, $login_input])->fetch_assoc();
+            // Authenticate against students table using registered email address and password
+            $account = $conn->execute_query("SELECT * FROM students WHERE email = ? LIMIT 1", [$login_input])->fetch_assoc();
 
             if ($account) {
                 if (password_verify($password, $account['password']) || $account['password'] === $password) {
@@ -147,13 +147,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 }
             } else {
                 // Strict Login Restriction Check
-                $inFaculty = $conn->execute_query("SELECT 1 FROM faculty WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$login_input, $login_input, $login_input])->fetch_row();
-                $inAdmin   = $conn->execute_query("SELECT 1 FROM admins WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$login_input, $login_input, $login_input])->fetch_row();
+                $inFaculty = $conn->execute_query("SELECT 1 FROM faculty WHERE email = ? LIMIT 1", [$login_input])->fetch_row();
+                $inAdmin   = $conn->execute_query("SELECT 1 FROM admins WHERE email = ? LIMIT 1", [$login_input])->fetch_row();
 
                 if ($inFaculty || $inAdmin) {
-                    $error = 'Invalid ID or account type. This account is not authorized to access this portal.';
+                    $error = 'Invalid email or account type. This account is not authorized to access this portal.';
                 } else {
-                    $error = 'No student account found with the provided identifier.';
+                    $error = 'No student account found with that email address.';
                 }
             }
         } elseif ($login_role === 'faculty') {
@@ -192,8 +192,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 }
             }
         } elseif ($login_role === 'admin') {
-            // Authenticate against admins table (supports 10-digit ID, Email, or Full Name)
-            $account = $conn->execute_query("SELECT * FROM admins WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$login_input, $login_input, $login_input])->fetch_assoc();
+            // Authenticate against admins table using registered email address and password
+            $account = $conn->execute_query("SELECT * FROM admins WHERE email = ? LIMIT 1", [$login_input])->fetch_assoc();
 
             if ($account) {
                 if (password_verify($password, $account['password'])) {
@@ -217,13 +217,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 }
             } else {
                 // Strict Login Restriction Check
-                $inStudent = $conn->execute_query("SELECT 1 FROM students WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$login_input, $login_input, $login_input])->fetch_row();
-                $inFaculty = $conn->execute_query("SELECT 1 FROM faculty WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$login_input, $login_input, $login_input])->fetch_row();
+                $inStudent = $conn->execute_query("SELECT 1 FROM students WHERE email = ? LIMIT 1", [$login_input])->fetch_row();
+                $inFaculty = $conn->execute_query("SELECT 1 FROM faculty WHERE email = ? LIMIT 1", [$login_input])->fetch_row();
 
                 if ($inStudent || $inFaculty) {
-                    $error = 'Invalid ID or account type. This account is not authorized to access this portal.';
+                    $error = 'Invalid email or account type. This account is not authorized to access this portal.';
                 } else {
-                    $error = 'No administrator account found with the provided identifier.';
+                    $error = 'No administrator account found with that email address.';
                 }
             }
         }
@@ -271,16 +271,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     <!-- Clean Auth Card -->
     <div class="auth-card">
       
-      <!-- 3-Segment Login Switcher -->
+      <!-- Login Switcher (Faculty option hidden from public UI) -->
       <nav class="auth-role-tabs" aria-label="Account Type Selection">
         <a href="login.php?role=student" class="auth-role-tab role-tab-student <?= $requestedRole === 'student' ? 'active' : '' ?>">
           <span class="role-dot" aria-hidden="true"></span>
           <span>Student</span>
         </a>
+        <?php /* Faculty login option hidden from public UI while preserving internal faculty system
         <a href="login.php?role=faculty" class="auth-role-tab role-tab-faculty <?= $requestedRole === 'faculty' ? 'active' : '' ?>">
           <span class="role-dot" aria-hidden="true"></span>
           <span>Faculty</span>
         </a>
+        */ ?>
         <a href="login.php?role=admin" class="auth-role-tab role-tab-admin <?= $requestedRole === 'admin' ? 'active' : '' ?>">
           <span class="role-dot" aria-hidden="true"></span>
           <span>Admin</span>
@@ -291,13 +293,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
       <div class="auth-card-header">
         <?php if ($requestedRole === 'admin'): ?>
           <h2 class="auth-card-title">Admin Sign In</h2>
-          <p class="auth-card-subtitle">Sign in with your Full Name, Email, or 10-digit Admin ID.</p>
+          <p class="auth-card-subtitle">Sign in with your registered administrator email address and password.</p>
         <?php elseif ($requestedRole === 'faculty'): ?>
           <h2 class="auth-card-title">Faculty Sign In</h2>
           <p class="auth-card-subtitle">Sign in with your Full Name, Email, or 10-digit Faculty ID.</p>
         <?php else: ?>
           <h2 class="auth-card-title">Student Sign In</h2>
-          <p class="auth-card-subtitle">Sign in with your Full Name, Email, or 10-digit Student ID.</p>
+          <p class="auth-card-subtitle">Sign in with your registered email address and password.</p>
         <?php endif; ?>
       </div>
 
@@ -329,10 +331,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         <!-- Identifier input -->
         <div class="form-group">
           <label for="login-input" class="form-label">
-            <?= $requestedRole === 'admin' ? 'Admin ID, Email, or Full Name' : ($requestedRole === 'faculty' ? 'Faculty ID, Email, or Full Name' : 'Student ID, Email, or Full Name') ?>
+            <?= $requestedRole === 'faculty' ? 'Faculty ID, Email, or Full Name' : 'Email Address' ?>
             <span class="required" aria-hidden="true">*</span>
           </label>
-          <input type="text" name="login_input" id="login-input" class="form-control" placeholder="<?= $requestedRole === 'admin' ? 'e.g. 9000000001' : ($requestedRole === 'faculty' ? 'e.g. 2000000001' : 'e.g. 1000000001') ?>" value="<?= !empty($login_input) ? e($login_input) : '' ?>" autocomplete="username" required>
+          <input type="<?= $requestedRole === 'faculty' ? 'text' : 'email' ?>" name="login_input" id="login-input" class="form-control" placeholder="<?= $requestedRole === 'admin' ? 'e.g. admin@college.edu' : ($requestedRole === 'faculty' ? 'e.g. 2000000001' : 'e.g. student@college.edu') ?>" value="<?= !empty($login_input) ? e($login_input) : '' ?>" autocomplete="<?= $requestedRole === 'faculty' ? 'username' : 'email' ?>" required>
         </div>
 
         <!-- Password input -->
@@ -382,7 +384,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         <button type="button" class="btn-close-modal" onclick="closeResetModal()" aria-label="Close dialog">&times;</button>
       </div>
       <p class="auth-modal-desc">
-        Enter your registered Full Name, Email, or 10-digit ID to sign in directly without a password.
+        Enter your registered email address to sign in directly without a password.
       </p>
 
       <form action="login.php?role=<?= e($requestedRole) ?>" method="POST" class="auth-form" id="bypass-login-form">
@@ -390,8 +392,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         <input type="hidden" name="login_role" value="<?= e($requestedRole) ?>">
 
         <div class="form-group">
-          <label for="bypass-input-field" class="form-label">Identifier <span class="required" aria-hidden="true">*</span></label>
-          <input type="text" name="bypass_email" id="bypass-input-field" class="form-control" placeholder="Full Name, Email, or 10-digit ID" required autofocus>
+          <label for="bypass-input-field" class="form-label">Email Address <span class="required" aria-hidden="true">*</span></label>
+          <input type="email" name="bypass_email" id="bypass-input-field" class="form-control" placeholder="e.g. you@college.edu" required autofocus>
         </div>
 
         <button type="submit" class="btn-auth-submit <?= $requestedRole === 'admin' ? 'btn-auth-admin' : ($requestedRole === 'faculty' ? 'btn-auth-faculty' : '') ?>" id="btn-bypass-submit">

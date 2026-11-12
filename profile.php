@@ -4,27 +4,14 @@ require_once __DIR__ . '/db.php';
 
 
 
-if (empty($_SESSION['user_id'])) {
-
-    header("Location: login.php");
-
-    exit;
-
+$currentUser = null;
+if (!empty($_SESSION['user_id'])) {
+    $currentUser = $conn->execute_query("SELECT id, uid, username, account_type, email, name, avatar, role, bio, banner_url, created_at FROM users WHERE id = ?", [$_SESSION['user_id']])->fetch_assoc();
+    if (!$currentUser) {
+        unset($_SESSION['user_id'], $_SESSION['user_role'], $_SESSION['account_type'], $_SESSION['account_id']);
+    }
 }
-
-
-
-$currentUser = $conn->execute_query("SELECT id, uid, username, account_type, email, name, avatar, role, bio, banner_url, created_at FROM users WHERE id = ?", [$_SESSION['user_id']])->fetch_assoc();
-
-if (!$currentUser) {
-
-    unset($_SESSION['user_id'], $_SESSION['user_role'], $_SESSION['account_type'], $_SESSION['account_id']);
-
-    header("Location: login.php");
-
-    exit;
-
-}
+$currentUserId = $currentUser ? (int)$currentUser['id'] : 0;
 
 
 
@@ -79,14 +66,22 @@ if ($targetId > 0) {
 }
 
 if (!$profileUser) {
-
-    $profileUser = $currentUser;
-
+    if ($currentUser) {
+        $profileUser = $currentUser;
+    } else {
+        header("Location: register.php");
+        exit;
+    }
 }
 
+// Enforce role-based profile visibility: non-admins cannot view admin profiles
+$profileRole = strtolower($profileUser['role'] ?? $profileUser['account_type'] ?? 'student');
+if ($profileRole === 'admin' && !is_admin()) {
+    header("Location: index.php");
+    exit;
+}
 
-
-$isOwnProfile = ((int)$currentUser['id'] === (int)$profileUser['id']);
+$isOwnProfile = ($currentUser && (int)$currentUser['id'] === (int)$profileUser['id']);
 
 $profileId = (int)$profileUser['id'];
 
@@ -101,6 +96,14 @@ $successMsg = !empty($_GET['updated']) ? 'Profile updated successfully!' : '';
 // Update Profile Action
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'update_profile') {
+
+    if (!$currentUser) {
+
+        header("Location: register.php");
+
+        exit;
+
+    }
 
     if (!$isOwnProfile) {
 
@@ -309,7 +312,7 @@ if ($tab === 'posts') {
 
         ORDER BY gm.joined_at DESC
 
-    ", [$currentUser['id'], $profileId])->fetch_all(MYSQLI_ASSOC);
+    ", [$currentUserId, $profileId])->fetch_all(MYSQLI_ASSOC);
 
 }
 
@@ -543,7 +546,7 @@ HTML PART
 
       <!-- Primary Post Button -->
 
-      <a href="index.php" class="btn-create-thread-sidebar" style="text-decoration: none; text-align: center; display: block;">
+      <a href="<?= $currentUser ? 'index.php?compose=1' : 'register.php' ?>" class="btn-create-thread-sidebar" style="text-decoration: none; text-align: center; display: block;">
 
         <span>Post</span>
 
@@ -554,7 +557,7 @@ HTML PART
 
 
     <!-- User Profile Bar -->
-
+    <?php if ($currentUser): ?>
     <div class="user-profile-bar" id="user-profile-bar" onclick="toggleProfileDropdown(event)">
 
       <div class="user-profile-info">
@@ -666,6 +669,14 @@ HTML PART
       </div>
 
     </div>
+    <?php else: ?>
+    <div class="guest-sidebar-auth" style="padding: 14px; border: 1px solid var(--border-color); border-radius: 16px; background: var(--bg-card); display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
+      <div style="font-size: 13px; font-weight: 700; color: var(--text-main);">Join Quaddit</div>
+      <div style="font-size: 12px; color: var(--text-muted); line-height: 1.4;">Register or sign in to post, reply, and join groups.</div>
+      <a href="register.php" class="btn-join-group" style="text-align: center; justify-content: center; padding: 8px 12px; font-size: 13px; text-decoration: none;">Create Account</a>
+      <a href="login.php" style="text-align: center; font-size: 12.5px; font-weight: 600; color: var(--primary-blue); text-decoration: none; padding: 4px;">Sign In</a>
+    </div>
+    <?php endif; ?>
 
   </aside>
 
@@ -786,34 +797,6 @@ HTML PART
           </svg>
 
         </h1>
-
-        <?php 
-
-          $pRole = $profileUser['role'] ?? $profileUser['account_type'] ?? 'student';
-
-          $pUid = $profileUser['uid'] ?? '';
-
-        ?>
-
-        <?php if ($pRole === 'admin'): ?>
-
-          <div class="profile-user-handle">Admin ID: <strong><?= e($pUid ?: $profileUser['username']) ?></strong></div>
-
-          <span class="user-role-badge badge-admin" style="font-size: 11px; padding: 2px 8px; margin-top: 4px; display: inline-block;">Administrator</span>
-
-        <?php elseif ($pRole === 'faculty'): ?>
-
-          <div class="profile-user-handle">Faculty ID: <strong><?= e($pUid ?: $profileUser['username']) ?></strong></div>
-
-          <span class="user-role-badge badge-faculty" style="font-size: 11px; padding: 2px 8px; margin-top: 4px; display: inline-block;">Faculty</span>
-
-        <?php else: ?>
-
-          <div class="profile-user-handle">Student ID: <strong><?= e($pUid ?: $profileUser['username']) ?></strong></div>
-
-          <span class="user-role-badge badge-student" style="font-size: 11px; padding: 2px 8px; margin-top: 4px; display: inline-block;">Student</span>
-
-        <?php endif; ?>
 
       </div>
 
@@ -1357,7 +1340,7 @@ HTML PART
 
             <div style="font-size: 17px; font-weight: 700; color: var(--text-main); margin-bottom: 6px;">No groups joined</div>
 
-            <p style="font-size: 13.5px;">This user has not joined any academic groups yet.</p>
+            <p style="font-size: 13.5px;">This user has not joined any groups yet.</p>
 
           </div>
 

@@ -33,10 +33,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $auth_key   = trim($_POST['auth_key'] ?? '');
 
     // 1. Mandatory Field Validation
-    if ($name === '' || $email === '' || $account_id === '' || $password === '' || $confirm === '') {
+    if ($name === '' || $email === '' || $password === '' || $confirm === '') {
         $error = 'Please fill in all required fields.';
-    } elseif (!preg_match('/^[0-9]{10}$/', $account_id)) {
-        // 2. Strict 10-Digit Numeric ID Validation
+    } elseif ($role !== 'student' && $account_id === '') {
+        $error = 'Please enter your 10-digit ' . ucfirst($role) . ' ID.';
+    } elseif ($role !== 'student' && !preg_match('/^[0-9]{10}$/', $account_id)) {
+        // 2. Strict 10-Digit Numeric ID Validation (Admin / Faculty)
         $error = 'Unique ID must contain exactly 10 numeric digits (digits only, no letters or special characters).';
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         // 3. Email Validation
@@ -46,13 +48,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $error = 'Passwords do not match.';
     } elseif (strlen($password) < 6) {
         $error = 'Password must be at least 6 characters.';
-    } elseif (check_id_exists($account_id, $conn)) {
+    } elseif ($role !== 'student' && check_id_exists($account_id, $conn)) {
         // 5. Cross-Table Unique ID Check (reject duplicates across students, faculty, and admins)
         $error = 'This 10-digit ID is already registered in the system. Duplicate IDs are not permitted.';
     } elseif (check_email_exists($email, $conn)) {
         // 6. Cross-Table Unique Email Check
         $error = 'This email address is already registered in the system. Please use a different email.';
     } else {
+        // Auto-generate a unique internal 10-digit record ID for student/normal users
+        if ($role === 'student') {
+            do {
+                $account_id = (string)random_int(1000000000, 1999999999);
+            } while (
+                check_id_exists($account_id, $conn) ||
+                $conn->execute_query("SELECT 1 FROM users WHERE uid = ? LIMIT 1", [$account_id])->fetch_row()
+            );
+        }
         // 7. Admin Security Authorization Check
         if ($role === 'admin') {
             $isAuthorizedAdmin = false;
@@ -114,7 +125,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             }
 
             // Redirect to Login page with account-type pre-selected
-            header("Location: login.php?role=" . urlencode($role) . "&registered=1&id=" . urlencode($account_id));
+            header("Location: login.php?role=" . urlencode($role) . "&registered=1&email=" . urlencode($email));
             exit;
         }
     }
@@ -161,16 +172,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     <!-- Clean Auth Card -->
     <div class="auth-card">
       
-      <!-- 3-Segment Registration Switcher -->
+      <!-- Registration Switcher (Faculty option hidden from public UI) -->
       <nav class="auth-role-tabs" aria-label="Account Type Selection">
         <a href="register.php?role=student" class="auth-role-tab role-tab-student <?= $requestedRole === 'student' ? 'active' : '' ?>">
           <span class="role-dot" aria-hidden="true"></span>
           <span>Student</span>
         </a>
+        <?php /* Faculty registration option hidden from public UI while preserving internal faculty system
         <a href="register.php?role=faculty" class="auth-role-tab role-tab-faculty <?= $requestedRole === 'faculty' ? 'active' : '' ?>">
           <span class="role-dot" aria-hidden="true"></span>
           <span>Faculty</span>
         </a>
+        */ ?>
         <a href="register.php?role=admin" class="auth-role-tab role-tab-admin <?= $requestedRole === 'admin' ? 'active' : '' ?>">
           <span class="role-dot" aria-hidden="true"></span>
           <span>Admin</span>
@@ -181,13 +194,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
       <div class="auth-card-header">
         <?php if ($requestedRole === 'admin'): ?>
           <h2 class="auth-card-title">Admin Registration</h2>
-          <p class="auth-card-subtitle">Register your authorized 10-digit ID to access administrative tools.</p>
+          <p class="auth-card-subtitle">Register with your authorized 10-digit Admin ID, email, and password.</p>
         <?php elseif ($requestedRole === 'faculty'): ?>
           <h2 class="auth-card-title">Faculty Registration</h2>
           <p class="auth-card-subtitle">Create a faculty account using your official 10-digit Faculty ID.</p>
         <?php else: ?>
           <h2 class="auth-card-title">Student Registration</h2>
-          <p class="auth-card-subtitle">Create a student account using your 10-digit Student ID.</p>
+          <p class="auth-card-subtitle">Create your account using your full name, email address, and password.</p>
         <?php endif; ?>
       </div>
 
@@ -217,15 +230,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
           <input type="email" name="email" id="reg-email" class="form-control" placeholder="<?= $requestedRole === 'student' ? 'e.g. student@college.edu' : 'e.g. faculty@college.edu' ?>" value="<?= isset($_POST['email']) ? e($_POST['email']) : '' ?>" autocomplete="email" required>
         </div>
 
-        <!-- 3. Unique 10-Digit ID -->
+        <?php if ($requestedRole === 'admin' || $requestedRole === 'faculty'): ?>
+        <!-- 3. Unique 10-Digit ID (Required for Admin / Faculty) -->
         <div class="form-group">
           <div class="form-label-row">
             <label for="account_id_input" class="form-label">10-Digit <?= ucfirst($requestedRole) ?> ID <span class="required" aria-hidden="true">*</span></label>
             <span class="form-label-hint">Digits only</span>
           </div>
-          <input type="text" name="account_id" id="account_id_input" class="form-control" placeholder="<?= $requestedRole === 'admin' ? 'e.g. 9000000001' : ($requestedRole === 'faculty' ? 'e.g. 2000000001' : 'e.g. 1000000001') ?>" value="<?= isset($_POST['account_id']) ? e($_POST['account_id']) : '' ?>" maxlength="10" pattern="[0-9]{10}" inputmode="numeric" required oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 10)">
+          <input type="text" name="account_id" id="account_id_input" class="form-control" placeholder="<?= $requestedRole === 'admin' ? 'e.g. 9000000001' : 'e.g. 2000000001' ?>" value="<?= isset($_POST['account_id']) ? e($_POST['account_id']) : '' ?>" maxlength="10" pattern="[0-9]{10}" inputmode="numeric" required oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 10)">
           <span class="form-help-text">Enter your official 10-digit institutional ID number.</span>
         </div>
+        <?php endif; ?>
 
         <!-- 4. Password -->
         <div class="form-group">
