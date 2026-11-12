@@ -333,6 +333,10 @@ function toggleEditReplyForm(replyId) {
 }
 
 function handlePostCardClick(event, postId) {
+  const selection = window.getSelection ? window.getSelection() : null;
+  if (selection && selection.toString().length > 0) {
+    return;
+  }
   const target = event.target;
   if (target.closest('button, a, input, textarea, label, .post-actions-menu, .post-replies-collapse, .post-media-grid, .post-action-btn, .reply-card')) {
     return;

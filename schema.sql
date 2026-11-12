@@ -118,6 +118,7 @@ CREATE TABLE `posts` (
   `title` VARCHAR(255) NOT NULL,
   `content` TEXT NOT NULL,
   `views` INT NOT NULL DEFAULT 0,
+  `is_pinned` TINYINT(1) NOT NULL DEFAULT 0,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
   INDEX `idx_posts_user` (`user_id`),

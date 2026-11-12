@@ -890,7 +890,7 @@ HTML PART
 
             ?>
 
-            <article class="post-card post-card-reddit" onclick="window.location.href='index.php?post=<?= $pId ?>'" style="cursor: pointer;">
+            <article class="post-card post-card-reddit" onclick="handleProfileCardClick(event, 'index.php?post=<?= $pId ?>')" style="cursor: pointer;">
 
               <div class="post-main-col">
 
@@ -1016,7 +1016,7 @@ HTML PART
 
             ?>
 
-            <div class="profile-reply-thread-group" onclick="window.location.href='index.php?post=<?= $pId ?>#reply-<?= $repId ?>'" style="cursor: pointer; border-bottom: 1px solid var(--border-color); padding: 14px 16px; transition: background-color 0.15s ease;">
+            <div class="profile-reply-thread-group" onclick="handleProfileCardClick(event, 'index.php?post=<?= $pId ?>#reply-<?= $repId ?>')" style="cursor: pointer; border-bottom: 1px solid var(--border-color); padding: 14px 16px; transition: background-color 0.15s ease;">
 
               
 
@@ -1278,7 +1278,22 @@ HTML PART
 
                   <a href="index.php?group=<?= (int)$g['id'] ?>" class="btn-group-action" style="background: var(--bg-hover); color: var(--text-main); text-decoration: none; text-align: center;">View Group</a>
 
-                  <?php if ($isMember): ?>
+                  <?php $isCreatorAdmin = ($currentUser && is_admin() && (int)($g['created_by'] ?? 0) === (int)$currentUserId); ?>
+                  <?php if ($isCreatorAdmin): ?>
+
+                    <form method="POST" action="index.php?view=groups" style="display:inline;" onsubmit="return confirm('You created this group and cannot leave it. Delete this group and all its discussions permanently?');">
+
+                      <input type="hidden" name="action" value="delete_group">
+
+                      <input type="hidden" name="group_id" value="<?= (int)$g['id'] ?>">
+
+                      <input type="hidden" name="redirect" value="profile.php?id=<?= (int)$profileId ?>&tab=groups">
+
+                      <button type="submit" class="btn-group-action btn-leave-group" style="color: #f4212e; border-color: rgba(244, 33, 46, 0.35);">Delete</button>
+
+                    </form>
+
+                  <?php elseif ($isMember): ?>
 
                     <form method="POST" action="index.php?view=groups" style="display:inline;">
 
@@ -1737,6 +1752,18 @@ if (bioTextarea && bioCharCount) {
 }
 
 
+
+// Allow text selection & copying without triggering card navigation
+function handleProfileCardClick(event, url) {
+  const selection = window.getSelection ? window.getSelection() : null;
+  if (selection && selection.toString().length > 0) {
+    return;
+  }
+  if (event.target && event.target.closest('button, a, input, textarea, label')) {
+    return;
+  }
+  window.location.href = url;
+}
 
 // Lightbox
 

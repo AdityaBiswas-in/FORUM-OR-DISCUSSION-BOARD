@@ -321,9 +321,28 @@ if ($action === 'join_group') {
 
 if ($action === 'leave_group') {
 
+    if (!$currentUser) {
+        header("Location: register.php");
+        exit;
+    }
+
     $groupId = (int)($_REQUEST['group_id'] ?? 0);
 
     if ($groupId > 0) {
+
+        $grp = $conn->execute_query("SELECT created_by FROM groups WHERE id = ?", [$groupId])->fetch_assoc();
+
+        if ($grp && is_admin() && (int)$grp['created_by'] === (int)$currentUser['id']) {
+
+            $baseRedirect = !empty($_REQUEST['redirect']) ? $_REQUEST['redirect'] : "index.php?group=$groupId";
+
+            $sep = str_contains($baseRedirect, '?') ? '&' : '?';
+
+            header("Location: {$baseRedirect}{$sep}error=creator_cannot_leave");
+
+            exit;
+
+        }
 
         $conn->execute_query("DELETE FROM group_members WHERE group_id = ? AND user_id = ?", [$groupId, $currentUser['id']]);
 
@@ -515,7 +534,9 @@ if ($action === 'delete_group') {
 
         $conn->execute_query("DELETE FROM groups WHERE id = ?", [$groupId]);
 
-        header("Location: index.php?view=admin&msg=group_deleted");
+        $redirect = !empty($_REQUEST['redirect']) ? $_REQUEST['redirect'] : "index.php?view=admin&msg=group_deleted";
+
+        header("Location: $redirect");
 
         exit;
 
@@ -643,6 +664,33 @@ if ($action === 'edit_post') {
 
 
 
+// Admin: Toggle Pin Post
+
+if ($action === 'toggle_pin_post') {
+
+    if (!is_admin()) {
+        header("Location: index.php?error=unauthorized");
+        exit;
+    }
+
+    $postId = (int)($_REQUEST['id'] ?? $_POST['post_id'] ?? 0);
+    $post = $conn->execute_query("SELECT id, group_id, is_pinned FROM posts WHERE id = ?", [$postId])->fetch_assoc();
+
+    if ($post) {
+        $newPinned = empty($post['is_pinned']) ? 1 : 0;
+        $conn->execute_query("UPDATE posts SET is_pinned = ? WHERE id = ?", [$newPinned, $postId]);
+        $redirect = !empty($_REQUEST['redirect']) ? $_REQUEST['redirect'] : (!empty($post['group_id']) ? "index.php?group={$post['group_id']}#post-$postId" : "index.php#post-$postId");
+        header("Location: $redirect");
+        exit;
+    }
+
+    header("Location: index.php");
+    exit;
+
+}
+
+
+
 // Delete Post (Owner in active group OR Admin)
 
 if ($action === 'delete_post') {
@@ -684,6 +732,33 @@ if ($action === 'delete_post') {
 
     header("Location: index.php");
 
+    exit;
+
+}
+
+
+
+// Admin: Toggle Pin Post
+
+if ($action === 'toggle_pin_post') {
+
+    if (!is_admin()) {
+        header("Location: index.php?error=unauthorized");
+        exit;
+    }
+
+    $postId = (int)($_REQUEST['id'] ?? $_POST['post_id'] ?? 0);
+    $post = $conn->execute_query("SELECT id, group_id, is_pinned FROM posts WHERE id = ?", [$postId])->fetch_assoc();
+
+    if ($post) {
+        $newPinned = empty($post['is_pinned']) ? 1 : 0;
+        $conn->execute_query("UPDATE posts SET is_pinned = ? WHERE id = ?", [$newPinned, $postId]);
+        $redirect = !empty($_REQUEST['redirect']) ? $_REQUEST['redirect'] : (!empty($post['group_id']) ? "index.php?group={$post['group_id']}#post-$postId" : "index.php#post-$postId");
+        header("Location: $redirect");
+        exit;
+    }
+
+    header("Location: index.php");
     exit;
 
 }
@@ -792,6 +867,33 @@ if ($action === 'edit_reply') {
 
 
 
+// Admin: Toggle Pin Post
+
+if ($action === 'toggle_pin_post') {
+
+    if (!is_admin()) {
+        header("Location: index.php?error=unauthorized");
+        exit;
+    }
+
+    $postId = (int)($_REQUEST['id'] ?? $_POST['post_id'] ?? 0);
+    $post = $conn->execute_query("SELECT id, group_id, is_pinned FROM posts WHERE id = ?", [$postId])->fetch_assoc();
+
+    if ($post) {
+        $newPinned = empty($post['is_pinned']) ? 1 : 0;
+        $conn->execute_query("UPDATE posts SET is_pinned = ? WHERE id = ?", [$newPinned, $postId]);
+        $redirect = !empty($_REQUEST['redirect']) ? $_REQUEST['redirect'] : (!empty($post['group_id']) ? "index.php?group={$post['group_id']}#post-$postId" : "index.php#post-$postId");
+        header("Location: $redirect");
+        exit;
+    }
+
+    header("Location: index.php");
+    exit;
+
+}
+
+
+
 // Delete Reply (Owner in active group OR Admin)
 
 if ($action === 'delete_reply') {
@@ -832,6 +934,33 @@ if ($action === 'delete_reply') {
 
     header("Location: index.php");
 
+    exit;
+
+}
+
+
+
+// Admin: Toggle Pin Post
+
+if ($action === 'toggle_pin_post') {
+
+    if (!is_admin()) {
+        header("Location: index.php?error=unauthorized");
+        exit;
+    }
+
+    $postId = (int)($_REQUEST['id'] ?? $_POST['post_id'] ?? 0);
+    $post = $conn->execute_query("SELECT id, group_id, is_pinned FROM posts WHERE id = ?", [$postId])->fetch_assoc();
+
+    if ($post) {
+        $newPinned = empty($post['is_pinned']) ? 1 : 0;
+        $conn->execute_query("UPDATE posts SET is_pinned = ? WHERE id = ?", [$newPinned, $postId]);
+        $redirect = !empty($_REQUEST['redirect']) ? $_REQUEST['redirect'] : (!empty($post['group_id']) ? "index.php?group={$post['group_id']}#post-$postId" : "index.php#post-$postId");
+        header("Location: $redirect");
+        exit;
+    }
+
+    header("Location: index.php");
     exit;
 
 }
@@ -1098,7 +1227,7 @@ if ($current_view !== 'admin' && $current_view !== 'groups') {
 
 
 
-    $sql .= " ORDER BY p.created_at DESC";
+    $sql .= " ORDER BY p.is_pinned DESC, p.created_at DESC";
 
     $posts = $conn->execute_query($sql, $params)->fetch_all(MYSQLI_ASSOC);
 
@@ -1658,6 +1787,14 @@ HTML PART starts here
 
       </div>
 
+    <?php elseif ($errType === 'creator_cannot_leave'): ?>
+
+      <div style="background: rgba(244, 33, 46, 0.15); border: 1px solid rgba(244, 33, 46, 0.35); color: #fca5a5; padding: 12px 16px; border-radius: 14px; margin-bottom: 16px; font-size: 13.5px; font-weight: 600;">
+
+        ⚠️ Group creators cannot leave their own group. You can only delete the group.
+
+      </div>
+
     <?php endif; ?>
 
 
@@ -2118,7 +2255,16 @@ HTML PART starts here
 
                   </a>
 
-                  <?php if ($isMem): ?>
+                  <?php $isCreatorAdmin = ($currentUser && is_admin() && (int)($g['created_by'] ?? 0) === (int)$currentUser['id']); ?>
+                  <?php if ($isCreatorAdmin): ?>
+
+                    <a href="index.php?action=delete_group&group_id=<?= (int)$g['id'] ?>&redirect=<?= urlencode('index.php?view=groups&msg=group_deleted') ?>" class="btn-leave-group" style="color: #f4212e; border-color: rgba(244, 33, 46, 0.35);" onclick="return confirm('You created this group and cannot leave it. Delete this group and all its discussions permanently?')">
+
+                      Delete
+
+                    </a>
+
+                  <?php elseif ($isMem): ?>
 
                     <a href="index.php?action=leave_group&group_id=<?= (int)$g['id'] ?>&redirect=<?= urlencode('index.php?view=groups') ?>" class="btn-leave-group" onclick="return confirm('Leave this group?')">
 
@@ -2301,11 +2447,23 @@ HTML PART starts here
 
                 </span>
 
-                <a href="index.php?action=leave_group&group_id=<?= $selected_group_id ?>&redirect=<?= urlencode("index.php?group=$selected_group_id") ?>" class="btn-leave-group" onclick="return confirm('Leave this group?')">
+                <?php if ($currentUser && is_admin() && (int)($currentGroup['created_by'] ?? 0) === (int)$currentUser['id']): ?>
 
-                  Leave Group
+                  <a href="index.php?action=delete_group&group_id=<?= $selected_group_id ?>&redirect=<?= urlencode('index.php?view=groups&msg=group_deleted') ?>" class="btn-leave-group" style="color: #f4212e; border-color: rgba(244, 33, 46, 0.35);" onclick="return confirm('You created this group and cannot leave it. Delete this group and all its discussions permanently?')">
 
-                </a>
+                    Delete Group
+
+                  </a>
+
+                <?php else: ?>
+
+                  <a href="index.php?action=leave_group&group_id=<?= $selected_group_id ?>&redirect=<?= urlencode("index.php?group=$selected_group_id") ?>" class="btn-leave-group" onclick="return confirm('Leave this group?')">
+
+                    Leave Group
+
+                  </a>
+
+                <?php endif; ?>
 
               <?php else: ?>
 
@@ -2581,10 +2739,20 @@ HTML PART starts here
               $canViewAuthorProfile = (($post['author_role'] ?? '') !== 'admin' || is_admin());
               $isPostGroupRestricted = (($post['group_status'] ?? 'active') === 'restricted');
               $canModifyPost = (!$isPostGroupRestricted || is_admin());
+              $isPinned = !empty($post['is_pinned']);
             ?>
-            <article class="post-card post-card-reddit" id="post-<?= $postId ?>" data-post-id="<?= $postId ?>" onclick="handlePostCardClick(event, <?= $postId ?>, <?= (int)$post['group_id'] ?>)" style="cursor: pointer;">
+            <article class="post-card post-card-reddit<?= $isPinned ? ' is-pinned-post' : '' ?>" id="post-<?= $postId ?>" data-post-id="<?= $postId ?>" onclick="handlePostCardClick(event, <?= $postId ?>, <?= (int)$post['group_id'] ?>)" style="cursor: pointer;">
 
               <div class="post-main-col">
+
+                <?php if ($isPinned): ?>
+                  <div class="post-pinned-badge">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                    </svg>
+                    <span>Pinned by Admin</span>
+                  </div>
+                <?php endif; ?>
 
                 <?php if (!$isGroupFeed): ?>
                   <!-- Homepage / Feed: Group Name (Row 1) -> Username -> Timestamp (Row 2) -->
@@ -2642,6 +2810,14 @@ HTML PART starts here
                           </svg>
                         </button>
                         <div class="three-dots-dropdown" id="post-menu-<?= $postId ?>">
+                          <?php if (is_admin()): ?>
+                            <button type="button" onclick="window.location.href='index.php?action=toggle_pin_post&id=<?= $postId ?>&redirect=<?= urlencode($_SERVER['REQUEST_URI'] ?? 'index.php') ?>'">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                              </svg>
+                              <?= $isPinned ? 'Unpin Discussion' : 'Pin Discussion' ?>
+                            </button>
+                          <?php endif; ?>
                           <?php if ($isAuthor && $canModifyPost): ?>
                             <button type="button" 
                                     data-id="<?= $postId ?>" 
@@ -3750,6 +3926,14 @@ function toggleNestedComposer(replyId) {
 }
 
 function handlePostCardClick(event, postId, groupId) {
+
+  const selection = window.getSelection ? window.getSelection() : null;
+
+  if (selection && selection.toString().length > 0) {
+
+    return;
+
+  }
 
   const target = event.target;
 
