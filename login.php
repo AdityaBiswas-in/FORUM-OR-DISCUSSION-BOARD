@@ -57,14 +57,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 exit;
             } else {
                 // Check if account belongs to another portal
-                $inOther = $conn->execute_query("SELECT 1 FROM faculty WHERE email = ? LIMIT 1", [$input])->fetch_row()
+                $inOther = (table_exists('faculty', $conn) && $conn->execute_query("SELECT 1 FROM faculty WHERE email = ? LIMIT 1", [$input])->fetch_row())
                         || $conn->execute_query("SELECT 1 FROM admins WHERE email = ? LIMIT 1", [$input])->fetch_row();
                 $error = $inOther 
                     ? "Invalid email or account type. This account is not authorized to access this portal." 
                     : "No student account found with that email address.";
             }
         } elseif ($login_role === 'faculty') {
-            $account = $conn->execute_query("SELECT * FROM faculty WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_assoc();
+            $account = table_exists('faculty', $conn) ? $conn->execute_query("SELECT * FROM faculty WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_assoc() : null;
             if ($account) {
                 $u = $conn->execute_query("SELECT id FROM users WHERE uid = ? OR email = ? LIMIT 1", [$account['id'], $account['email']])->fetch_assoc();
                 $userId = $u ? (int)$u['id'] : 0;
@@ -104,7 +104,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 exit;
             } else {
                 $inOther = $conn->execute_query("SELECT 1 FROM students WHERE email = ? LIMIT 1", [$input])->fetch_row()
-                        || $conn->execute_query("SELECT 1 FROM faculty WHERE email = ? LIMIT 1", [$input])->fetch_row();
+                        || (table_exists('faculty', $conn) && $conn->execute_query("SELECT 1 FROM faculty WHERE email = ? LIMIT 1", [$input])->fetch_row());
                 $error = $inOther 
                     ? "Invalid email or account type. This account is not authorized to access this portal." 
                     : "No administrator account found with that email address.";
@@ -147,7 +147,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 }
             } else {
                 // Strict Login Restriction Check
-                $inFaculty = $conn->execute_query("SELECT 1 FROM faculty WHERE email = ? LIMIT 1", [$login_input])->fetch_row();
+                $inFaculty = table_exists('faculty', $conn) && $conn->execute_query("SELECT 1 FROM faculty WHERE email = ? LIMIT 1", [$login_input])->fetch_row();
                 $inAdmin   = $conn->execute_query("SELECT 1 FROM admins WHERE email = ? LIMIT 1", [$login_input])->fetch_row();
 
                 if ($inFaculty || $inAdmin) {
@@ -158,7 +158,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             }
         } elseif ($login_role === 'faculty') {
             // Authenticate against faculty table (supports 10-digit ID, Email, or Full Name)
-            $account = $conn->execute_query("SELECT * FROM faculty WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$login_input, $login_input, $login_input])->fetch_assoc();
+            $account = table_exists('faculty', $conn) ? $conn->execute_query("SELECT * FROM faculty WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$login_input, $login_input, $login_input])->fetch_assoc() : null;
 
             if ($account) {
                 if (password_verify($password, $account['password'])) {
@@ -218,7 +218,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             } else {
                 // Strict Login Restriction Check
                 $inStudent = $conn->execute_query("SELECT 1 FROM students WHERE email = ? LIMIT 1", [$login_input])->fetch_row();
-                $inFaculty = $conn->execute_query("SELECT 1 FROM faculty WHERE email = ? LIMIT 1", [$login_input])->fetch_row();
+                $inFaculty = table_exists('faculty', $conn) && $conn->execute_query("SELECT 1 FROM faculty WHERE email = ? LIMIT 1", [$login_input])->fetch_row();
 
                 if ($inStudent || $inFaculty) {
                     $error = 'Invalid email or account type. This account is not authorized to access this portal.';

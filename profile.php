@@ -1204,7 +1204,7 @@ HTML PART
 
         <?php if (!empty($userGroups)): ?>
 
-          <div class="groups-grid" style="grid-template-columns: 1fr;">
+          <div class="groups-grid profile-groups-list" style="grid-template-columns: 1fr;">
 
             <?php foreach ($userGroups as $g): ?>
 

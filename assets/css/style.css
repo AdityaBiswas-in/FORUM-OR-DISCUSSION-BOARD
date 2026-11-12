@@ -89,7 +89,7 @@
 
   --badge-bg: #F1F5F9;
   --badge-text: #334155;
-  --online-green: #23856D;
+  --online-green: #15803d;
   --danger-red: #DC2626;
   --danger-bg: rgba(220, 38, 38, 0.08);
   --like-pink: #E11D48;
@@ -273,12 +273,12 @@ img, svg {
 }
 
 [data-theme="light"] .nav-item.active a {
-  background-color: var(--primary-blue-light);
-  color: var(--primary-blue);
+  background-color: #E5EBEE;
+  color: #181C1F;
 }
 
 [data-theme="light"] .nav-item.active a svg {
-  color: var(--primary-blue);
+  color: #181C1F;
 }
 
 /* Primary Sidebar Action ("Post") */
@@ -2805,8 +2805,8 @@ a.post-group-author-link:hover .author-name {
 }
 
 [data-theme="light"] .nav-item-admin.active a {
-  background-color: var(--primary-blue-light);
-  color: var(--primary-blue) !important;
+  background-color: #E5EBEE;
+  color: #181C1F !important;
 }
 
 /* Group Header Banner */
@@ -3131,7 +3131,7 @@ a.post-group-author-link:hover .author-name {
   flex-direction: column;
   align-items: center;
   min-width: 0;
-  margin-top: 4px;
+  margin-top: 16px;
 }
 
 .group-card-icon {
@@ -3249,6 +3249,54 @@ a.post-group-author-link:hover .author-name {
   padding: 6px 12px;
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+/* Profile Page Groups Tab List Overrides */
+.profile-groups-list .group-card {
+  aspect-ratio: auto;
+  align-items: stretch;
+  text-align: left;
+  padding: 16px 18px;
+  gap: 8px;
+}
+
+.profile-groups-list .group-card-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile-groups-list .group-card-title {
+  text-align: left;
+  margin-bottom: 2px;
+}
+
+.profile-groups-list .group-card-meta {
+  justify-content: flex-start;
+}
+
+.profile-groups-list .group-card-desc {
+  text-align: left;
+  margin: 10px 0 0 0;
+}
+
+.profile-groups-list .group-card-actions {
+  justify-content: space-between;
+  padding-top: 12px;
+  margin-top: 4px;
+}
+
+.profile-groups-list .btn-group-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 12.5px;
+  font-weight: 600;
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 /* Composer Group Selector */
@@ -4015,16 +4063,22 @@ select:focus-visible {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
+[data-theme="light"] .widget-joined-badge {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #86efac;
+}
+
 [data-theme="light"] .btn-view-group {
-  background: #FFFFFF;
-  color: #1E293B;
-  border-color: #E2E8F0;
+  background: #F8FAFC;
+  color: #0F172A;
+  border-color: #CBD5E1;
 }
 
 [data-theme="light"] .btn-view-group:hover {
-  background: #F1F5F9;
-  color: #1E293B;
-  border-color: #CBD5E1;
+  background: #EFF6FF;
+  color: #1D4ED8;
+  border-color: #93C5FD;
   transform: none;
 }
 
@@ -4050,21 +4104,21 @@ select:focus-visible {
 }
 
 [data-theme="light"] .group-status-badge.status-active {
-  background: rgba(35, 133, 109, 0.08);
-  color: #23856D;
-  border-color: rgba(35, 133, 109, 0.22);
+  background: #dcfce7;
+  color: #166534;
+  border-color: #86efac;
 }
 
 [data-theme="light"] .group-status-badge.status-restricted {
-  background: rgba(180, 83, 9, 0.08);
-  color: #B45309;
-  border-color: rgba(180, 83, 9, 0.22);
+  background: #fef3c7;
+  color: #b45309;
+  border-color: #fcd34d;
 }
 
 [data-theme="light"] .groups-count-pill {
-  background: #F1F5F9;
-  color: #475569;
-  border-color: #E2E8F0;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
 }
 
 [data-theme="light"] .post-group-badge {
@@ -4081,12 +4135,13 @@ select:focus-visible {
 [data-theme="light"] .btn-leave-group {
   background: #FFFFFF;
   color: #475569;
-  border-color: #E2E8F0;
+  border-color: #CBD5E1;
 }
 
 [data-theme="light"] .btn-leave-group:hover {
-  background: #F1F5F9;
-  color: #1E293B;
+  background: #FEF2F2;
+  color: #DC2626;
+  border-color: #FECACA;
 }
 
 /* ==========================================================================

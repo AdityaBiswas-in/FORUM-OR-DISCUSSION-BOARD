@@ -74,21 +74,33 @@ if (!function_exists('is_student')) {
     }
 }
 
-// Helper: Check if 10-digit ID exists in any of the three account tables
+// Helper: Check if a table exists in the current database
+if (!function_exists('table_exists')) {
+    function table_exists(string $table, mysqli $conn): bool {
+        static $cache = [];
+        if (!isset($cache[$table])) {
+            $escaped = $conn->real_escape_string($table);
+            $cache[$table] = (bool)$conn->query("SHOW TABLES LIKE '$escaped'")->fetch_row();
+        }
+        return $cache[$table];
+    }
+}
+
+// Helper: Check if 10-digit ID exists in any of the account tables
 if (!function_exists('check_id_exists')) {
     function check_id_exists(string $id, mysqli $conn): ?string {
         if ($conn->execute_query("SELECT 1 FROM students WHERE id = ? LIMIT 1", [$id])->fetch_row()) return 'student';
-        if ($conn->execute_query("SELECT 1 FROM faculty WHERE id = ? LIMIT 1", [$id])->fetch_row()) return 'faculty';
+        if (table_exists('faculty', $conn) && $conn->execute_query("SELECT 1 FROM faculty WHERE id = ? LIMIT 1", [$id])->fetch_row()) return 'faculty';
         if ($conn->execute_query("SELECT 1 FROM admins WHERE id = ? LIMIT 1", [$id])->fetch_row()) return 'admin';
         return null;
     }
 }
 
-// Helper: Check if email exists in any of the three account tables
+// Helper: Check if email exists in any of the account tables
 if (!function_exists('check_email_exists')) {
     function check_email_exists(string $email, mysqli $conn): ?string {
         if ($conn->execute_query("SELECT 1 FROM students WHERE email = ? LIMIT 1", [$email])->fetch_row()) return 'student';
-        if ($conn->execute_query("SELECT 1 FROM faculty WHERE email = ? LIMIT 1", [$email])->fetch_row()) return 'faculty';
+        if (table_exists('faculty', $conn) && $conn->execute_query("SELECT 1 FROM faculty WHERE email = ? LIMIT 1", [$email])->fetch_row()) return 'faculty';
         if ($conn->execute_query("SELECT 1 FROM admins WHERE email = ? LIMIT 1", [$email])->fetch_row()) return 'admin';
         return null;
     }

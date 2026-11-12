@@ -99,7 +99,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 $stmt = $conn->prepare("INSERT INTO students (id, name, email, password, avatar, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
                 $stmt->bind_param("sssss", $account_id, $name, $email, $hashedPassword, $defaultAvatar);
                 $stmt->execute();
-            } elseif ($role === 'faculty') {
+            } elseif ($role === 'faculty' && table_exists('faculty', $conn)) {
                 $stmt = $conn->prepare("INSERT INTO faculty (id, name, email, password, avatar, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
                 $stmt->bind_param("sssss", $account_id, $name, $email, $hashedPassword, $defaultAvatar);
                 $stmt->execute();
