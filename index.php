@@ -1227,7 +1227,15 @@ if ($current_view !== 'admin' && $current_view !== 'groups') {
 
 
 
-    $sql .= " ORDER BY p.is_pinned DESC, p.created_at DESC";
+    if ($selected_group_id > 0) {
+
+        $sql .= " ORDER BY p.is_pinned DESC, p.created_at DESC";
+
+    } else {
+
+        $sql .= " ORDER BY p.created_at DESC";
+
+    }
 
     $posts = $conn->execute_query($sql, $params)->fetch_all(MYSQLI_ASSOC);
 
@@ -2739,7 +2747,7 @@ HTML PART starts here
               $canViewAuthorProfile = (($post['author_role'] ?? '') !== 'admin' || is_admin());
               $isPostGroupRestricted = (($post['group_status'] ?? 'active') === 'restricted');
               $canModifyPost = (!$isPostGroupRestricted || is_admin());
-              $isPinned = !empty($post['is_pinned']);
+              $isPinned = ($isGroupFeed && !empty($post['is_pinned']));
             ?>
             <article class="post-card post-card-reddit<?= $isPinned ? ' is-pinned-post' : '' ?>" id="post-<?= $postId ?>" data-post-id="<?= $postId ?>" onclick="handlePostCardClick(event, <?= $postId ?>, <?= (int)$post['group_id'] ?>)" style="cursor: pointer;">
 
@@ -2810,7 +2818,7 @@ HTML PART starts here
                           </svg>
                         </button>
                         <div class="three-dots-dropdown" id="post-menu-<?= $postId ?>">
-                          <?php if (is_admin()): ?>
+                          <?php if (is_admin() && $isGroupFeed): ?>
                             <button type="button" onclick="window.location.href='index.php?action=toggle_pin_post&id=<?= $postId ?>&redirect=<?= urlencode($_SERVER['REQUEST_URI'] ?? 'index.php') ?>'">
                               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
