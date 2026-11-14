@@ -27,13 +27,13 @@
 
 <div align="center">
 
-| Central Discussion Feed & Quick Composer | Group Communities Hub |
-| :---: | :---: |
-| <img src="./assets/images/logo-dark-theme.png" alt="Home Feed Preview" width="380"/><br/>*Real-time WYSIWYG composer, multi-image attachment previews, and chronological feeds* | <img src="./assets/images/logo-light-theme.png" alt="Groups Hub Preview" width="380"/><br/>*Subject and topic-based group catalog with one-click join/leave and member gating* |
+|                                                                    Central Discussion Feed & Quick Composer                                                                     |                                                                             Group Communities Hub                                                                              |
+| :-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
+| <img src="./assets/images/logo-dark-theme.png" alt="Home Feed Preview" width="380"/><br/>_Real-time WYSIWYG composer, multi-image attachment previews, and chronological feeds_ | <img src="./assets/images/logo-light-theme.png" alt="Groups Hub Preview" width="380"/><br/>_Subject and topic-based group catalog with one-click join/leave and member gating_ |
 
-| Administrative Control Panel | User Profile & Activity Manager |
-| :---: | :---: |
-| *Platform analytics, group lifecycle controls (active/restricted), and moderation tools* | *Custom 3:1 banner, profile avatar, biography, and tabbed post/reply activity history* |
+|                               Administrative Control Panel                               |                            User Profile & Activity Manager                             |
+| :--------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------: |
+| _Platform analytics, group lifecycle controls (active/restricted), and moderation tools_ | _Custom 3:1 banner, profile avatar, biography, and tabbed post/reply activity history_ |
 
 </div>
 
@@ -43,7 +43,7 @@
 
 - **Dependency-Free Architecture**: Zero bloated frontend libraries or heavy backend frameworks. Pure PHP 8.2+ and Vanilla JavaScript for maximum speed, transparency, and minimal server footprint.
 - **Role-Based Access Control (RBAC)**: Strict segregation between **Members** and **Administrators** with protected authentication gateways.
-- **Group Communities**: Create topic-specific channels (e.g., *Full Stack Development*, *Software Architecture*, *Cloud Engineering*) where posting is gated to joined members.
+- **Group Communities**: Create topic-specific channels (e.g., _Full Stack Development_, _Software Architecture_, _Cloud Engineering_) where posting is gated to joined members.
 - **Interactive Rich Composer**: In-place visual text styling (Bold, Italic, Strikethrough, Headings) with real-time active button states and safe Markdown fallback.
 - **Multi-Image Attachments**: Upload up to 4 images per discussion with instant client-side preview thumbnails and one-click removal before publishing.
 - **Recursive Threaded Discussions**: Unlimited nested reply hierarchy with parent-child relationship tracking and inline reply authoring.
@@ -54,6 +54,7 @@
 ## 🎯 Key Features by User Role
 
 ### 👥 For Public Visitors & Members
+
 - **Seamless Onboarding**: Simple account registration with validation and encrypted credential storage.
 - **Role-Isolated Login**: Clean authentication portal directing users according to account credentials.
 - **Community Discovery**: Browse public groups, discover trending discussions, and view member counts.
@@ -73,6 +74,7 @@
   - Tabbed activity view: **Posts Published** vs. **Replies Authored**.
 
 ### 🛡️ For Administrators
+
 - **Administrative Portal**: Secure, separate onboarding portal verified via administrative authorization key (`QUAD-ADMIN-2026`).
 - **Real-Time Analytics Dashboard**: Overview metrics displaying Total Groups, Active Groups, Total Discussions, and Registered Accounts.
 - **Group Lifecycle Management**:
@@ -117,45 +119,45 @@ The diagram below illustrates the complete operational lifecycle from guest onbo
 ```mermaid
 flowchart TD
     Guest([Visitor / Unauthenticated]) --> AuthCheck{Registered?}
-    
+
     AuthCheck -- No --> RegChoice{Select Registration}
     RegChoice -- Member --> RegUser[Member Registration<br/>Name, Username, Email, Password]
     RegChoice -- Admin --> RegAdmin[Admin Registration<br/>Admin ID + Auth Key Verification]
-    
+
     RegUser --> HashBcrypt[Bcrypt Password Hashing]
     RegAdmin --> HashBcrypt
     HashBcrypt --> SaveDB[(Store in MySQL)]
-    
+
     AuthCheck -- Yes --> LoginGate[Login Portal]
     SaveDB --> LoginGate
     LoginGate --> VerifyHash{password_verify}
-    
+
     VerifyHash -- Invalid --> LoginErr[Display Auth Error]
     LoginErr --> LoginGate
-    
+
     VerifyHash -- Valid --> CreateSession[Initialize Authenticated Session]
     CreateSession --> RoleRouter{User Role?}
-    
+
     %% Admin Workflow
     RoleRouter -- Admin --> AdminPanel[Admin Dashboard]
     AdminPanel --> ModGroups[Create / Restrict / Delete Groups]
     AdminPanel --> ModContent[Global Content Moderation]
     AdminPanel --> ModUsers[User Account Governance]
-    
+
     %% Member Workflow
     RoleRouter -- Member --> MainFeed[Home Discussion Feed]
     MainFeed --> GroupExplorer[Discover & Join Groups]
-    
+
     GroupExplorer --> CheckJoined{Joined Group?}
     CheckJoined -- No --> JoinPrompt[Prompt: Join to Publish]
     CheckJoined -- Yes --> PostComposer[Create Post: WYSIWYG + Multi-Image]
-    
+
     MainFeed --> ViewThread[Open Discussion Thread]
     ViewThread --> PostReply[Submit Threaded / Nested Reply]
-    
+
     MainFeed --> ManageOwn[Edit / Delete Owned Content]
     MainFeed --> ProfileManager[Customize Avatar, Banner & Bio]
-    
+
     %% Sign Out
     MainFeed --> SignOut[Logout]
     AdminPanel --> SignOut
@@ -303,16 +305,16 @@ erDiagram
 
 ### Table Dictionary
 
-| Table Name | Primary Key | Foreign Keys | Role & Description |
-| :--- | :--- | :--- | :--- |
-| **`users`** | `id` (AUTO_INCREMENT) | — | Unified relational bridge maintaining clean foreign keys across all entities without complex polymorphic joins. |
-| **`students`** | `id` (VARCHAR 10) | — | Dedicated storage for member accounts with unique 10-digit account identifiers. |
-| **`admins`** | `id` (VARCHAR 10) | — | Dedicated storage for system administrator accounts. |
-| **`groups`** | `id` (AUTO_INCREMENT) | `created_by` → `users(id)` | Discussion categories; supports `active` and `restricted` states. |
-| **`group_members`**| `id` (AUTO_INCREMENT) | `group_id`, `user_id` | Unique composite relationship (`group_id`, `user_id`) gating post creation. |
-| **`posts`** | `id` (AUTO_INCREMENT) | `user_id`, `group_id` | Discussion threads with title, content, view counter, and pinned flag. |
-| **`post_images`** | `id` (AUTO_INCREMENT) | `post_id` → `posts(id)` | Multi-image attachments linked to posts with cascading deletion. |
-| **`replies`** | `id` (AUTO_INCREMENT) | `post_id`, `user_id`, `parent_id` | Threaded comments supporting recursive nested replies (`parent_id` self-reference). |
+| Table Name          | Primary Key           | Foreign Keys                      | Role & Description                                                                                              |
+| :------------------ | :-------------------- | :-------------------------------- | :-------------------------------------------------------------------------------------------------------------- |
+| **`users`**         | `id` (AUTO_INCREMENT) | —                                 | Unified relational bridge maintaining clean foreign keys across all entities without complex polymorphic joins. |
+| **`students`**      | `id` (VARCHAR 10)     | —                                 | Dedicated storage for member accounts with unique 10-digit account identifiers.                                 |
+| **`admins`**        | `id` (VARCHAR 10)     | —                                 | Dedicated storage for system administrator accounts.                                                            |
+| **`groups`**        | `id` (AUTO_INCREMENT) | `created_by` → `users(id)`        | Discussion categories; supports `active` and `restricted` states.                                               |
+| **`group_members`** | `id` (AUTO_INCREMENT) | `group_id`, `user_id`             | Unique composite relationship (`group_id`, `user_id`) gating post creation.                                     |
+| **`posts`**         | `id` (AUTO_INCREMENT) | `user_id`, `group_id`             | Discussion threads with title, content, view counter, and pinned flag.                                          |
+| **`post_images`**   | `id` (AUTO_INCREMENT) | `post_id` → `posts(id)`           | Multi-image attachments linked to posts with cascading deletion.                                                |
+| **`replies`**       | `id` (AUTO_INCREMENT) | `post_id`, `user_id`, `parent_id` | Threaded comments supporting recursive nested replies (`parent_id` self-reference).                             |
 
 ---
 
@@ -356,12 +358,7 @@ FORUM-OR-DISCUSSION-BOARD/
 │   │   ├── auth.css                 # Dedicated portal styling (forms, input groups, badges)
 │   │   └── style.css                # Master application stylesheet (themes, cards, layout)
 │   ├── js/
-│   │   └── main.js                  # Client logic, WYSIWYG engine, dynamic modals & previews
-│   └── images/                      # Application brand logos and default SVGs
-│       ├── avatar_default.svg       # Fallback user profile avatar
-│       ├── logo-dark-theme.png      # Brand mark for dark mode
-│       ├── logo-light-theme.png     # Brand mark for light mode
-│       └── logo-transparent.png     # Transparent brand emblem
+│       └── main.js                  # Client logic, WYSIWYG engine, dynamic modals & previews
 │
 ├── includes/                        # Reusable Component Partials
 │   └── mobile-nav.php               # Bottom navigation bar for mobile viewports
@@ -393,6 +390,7 @@ FORUM-OR-DISCUSSION-BOARD/
 ### Step-by-Step Setup
 
 #### 1. Clone the Repository
+
 Clone this repository directly into your local web root directory (for XAMPP on Windows, use `htdocs`):
 
 ```bash
@@ -401,11 +399,14 @@ git clone https://github.com/your-username/FORUM-OR-DISCUSSION-BOARD.git
 ```
 
 #### 2. Start Web & Database Services
+
 Launch the **XAMPP Control Panel** and start:
+
 - **Apache** (Default ports: `80`, `443`)
 - **MySQL** (Default port: `3306`)
 
 #### 3. Import the Database Schema
+
 1. Open your browser and navigate to phpMyAdmin:
    ```
    http://localhost/phpmyadmin/
@@ -416,6 +417,7 @@ Launch the **XAMPP Control Panel** and start:
 5. The database `quaddit` and all required tables (`users`, `admins`, `students`, `groups`, `group_members`, `posts`, `post_images`, `replies`) will be created automatically.
 
 #### 4. Configure Database Connection (Optional)
+
 If your local MySQL uses a custom port, password, or host, adjust settings in [`db.php`](./db.php):
 
 ```php
@@ -423,13 +425,17 @@ $conn = new mysqli('127.0.0.1', 'root', 'your_password', 'quaddit', 3306);
 ```
 
 #### 5. Launch the Application
+
 Open your browser and navigate to:
+
 ```
 http://localhost/FORUM-OR-DISCUSSION-BOARD/
 ```
 
 #### 6. Admin Account Setup
+
 To create your first system administrator account:
+
 1. Navigate to: `http://localhost/FORUM-OR-DISCUSSION-BOARD/admin_register.php`
 2. Enter your details and provide the administrative authorization key:
    ```
