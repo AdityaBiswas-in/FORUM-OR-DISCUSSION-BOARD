@@ -646,7 +646,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const text = row.textContent.toLowerCase();
         const rowStatus = row.getAttribute('data-status') || '';
         const matchesText = !q || text.includes(q);
-        const matchesStatus = status === 'all' || rowStatus === status;
+        const matchesStatus = status === 'all' || rowStatus === status || (status === 'public' && (rowStatus === 'public' || rowStatus === 'active'));
         row.style.display = (matchesText && matchesStatus) ? '' : 'none';
       });
     };

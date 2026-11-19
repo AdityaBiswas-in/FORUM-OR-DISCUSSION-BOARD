@@ -228,23 +228,26 @@ $userGroups  = [];
 
 if ($tab === 'posts') {
 
-    $userPosts = $conn->execute_query("
-
-        SELECT p.*, g.name as group_name, g.image_url as group_image, u.name as author_name, u.username as author_username, u.avatar as author_avatar,
-
+    $profilePostSql = "
+        SELECT p.*, g.name as group_name, g.image_url as group_image, g.status as group_status,
+               u.name as author_name, u.username as author_username, u.avatar as author_avatar,
                (SELECT COUNT(*) FROM replies r WHERE r.post_id = p.id) as reply_count
-
         FROM posts p
-
         LEFT JOIN groups g ON p.group_id = g.id
-
         JOIN users u ON p.user_id = u.id
-
         WHERE p.user_id = ?
-
-        ORDER BY p.created_at DESC
-
-    ", [$profileId])->fetch_all(MYSQLI_ASSOC);
+    ";
+    $profilePostParams = [$profileId];
+    if (!is_admin() && (!$currentUser || (int)$currentUser['id'] !== (int)$profileId)) {
+        if ($currentUser) {
+            $profilePostSql .= " AND (g.status IS NULL OR g.status != 'private' OR EXISTS (SELECT 1 FROM group_members gm WHERE gm.group_id = g.id AND gm.user_id = ?))";
+            $profilePostParams[] = (int)$currentUser['id'];
+        } else {
+            $profilePostSql .= " AND (g.status IS NULL OR g.status != 'private')";
+        }
+    }
+    $profilePostSql .= " ORDER BY p.created_at DESC";
+    $userPosts = $conn->execute_query($profilePostSql, $profilePostParams)->fetch_all(MYSQLI_ASSOC);
 
 
 
@@ -1257,15 +1260,7 @@ HTML PART
 
                         </a>
 
-                        <?php if ($isRestricted): ?>
-
-                          <span class="group-status-badge status-restricted" style="font-size: 10px;">Restricted</span>
-
-                        <?php else: ?>
-
-                          <span class="group-status-badge status-active" style="font-size: 10px;">Active</span>
-
-                        <?php endif; ?>
+                        <?= render_group_status_badge($g['status'] ?? 'public', 'font-size: 10px;') ?>
 
                       </div>
 
@@ -1318,15 +1313,24 @@ HTML PART
 
                   <?php else: ?>
 
-                    <form method="POST" action="index.php?view=groups" style="display:inline;">
-
-                      <input type="hidden" name="action" value="join_group">
-
-                      <input type="hidden" name="group_id" value="<?= (int)$g['id'] ?>">
-
-                      <button type="submit" class="btn-group-action btn-join-group">Join</button>
-
-                    </form>
+                    <?php if (($g['status'] ?? '') === 'private' && !is_admin()): ?>
+                      <?php $hasReq = ($currentUser ? has_group_request((int)$currentUser['id'], (int)$g['id'], $conn) : false); ?>
+                      <?php if ($hasReq): ?>
+                        <span class="btn-group-action" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.35); cursor: default;">Pending</span>
+                      <?php else: ?>
+                        <form method="POST" action="index.php?view=groups" style="display:inline;">
+                          <input type="hidden" name="action" value="join_group">
+                          <input type="hidden" name="group_id" value="<?= (int)$g['id'] ?>">
+                          <button type="submit" class="btn-group-action btn-join-group" style="background: rgba(168, 85, 247, 0.2); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">Request</button>
+                        </form>
+                      <?php endif; ?>
+                    <?php else: ?>
+                      <form method="POST" action="index.php?view=groups" style="display:inline;">
+                        <input type="hidden" name="action" value="join_group">
+                        <input type="hidden" name="group_id" value="<?= (int)$g['id'] ?>">
+                        <button type="submit" class="btn-group-action btn-join-group">Join</button>
+                      </form>
+                    <?php endif; ?>
 
                   <?php endif; ?>
 

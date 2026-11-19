@@ -73,9 +73,9 @@ function render_format_toolbar(string $targetId = '', string $extraClass = ''): 
 }
 
 // Recursively render a reply and its child replies
-function renderReplyNode(array $rep, array $childrenByParent, array $repliesById, ?array $currentUser, int $postId, int $depth = 0, bool $isGroupRestricted = false): void {
+function renderReplyNode(array $rep, array $childrenByParent, array $repliesById, ?array $currentUser, int $postId, int $depth = 0, bool $isGroupRestricted = false, bool $isUserMember = false): void {
     $isRepAuthor = ($currentUser && (int)$rep['user_id'] === (int)$currentUser['id']);
-    $canModifyReply = (!$isGroupRestricted || is_admin());
+    $canModifyReply = ((!$isGroupRestricted && $isUserMember) || is_admin());
     $repId = (int)$rep['id'];
     $parentId = !empty($rep['parent_id']) ? (int)$rep['parent_id'] : 0;
     $parentAuthor = ($parentId > 0 && isset($repliesById[$parentId])) ? $repliesById[$parentId]['author_username'] : null;
@@ -254,7 +254,7 @@ function renderReplyNode(array $rep, array $childrenByParent, array $repliesById
 
           <?php foreach ($children as $child): ?>
 
-            <?php renderReplyNode($child, $childrenByParent, $repliesById, $currentUser, $postId, $depth + 1, $isGroupRestricted); ?>
+            <?php renderReplyNode($child, $childrenByParent, $repliesById, $currentUser, $postId, $depth + 1, $isGroupRestricted, $isUserMember); ?>
 
           <?php endforeach; ?>
 
@@ -283,24 +283,79 @@ if ($action !== '' && !$currentUser) {
 
 
 
-// Join Group Action
-
+// Join Group Action (Immediate for public/admin, Request for private non-admin)
 if ($action === 'join_group') {
-
-    $groupId = (int)($_REQUEST['group_id'] ?? 0);
-
-    if ($groupId > 0) {
-
-        $conn->execute_query("INSERT IGNORE INTO group_members (group_id, user_id, joined_at) VALUES (?, ?, NOW())", [$groupId, $currentUser['id']]);
-
+    if (!$currentUser) {
+        header("Location: register.php");
+        exit;
     }
-
+    $groupId = (int)($_REQUEST['group_id'] ?? 0);
+    if ($groupId > 0) {
+        $grp = $conn->execute_query("SELECT id, status FROM groups WHERE id = ?", [$groupId])->fetch_assoc();
+        if ($grp) {
+            $isPrivate = (($grp['status'] ?? '') === 'private');
+            if ($isPrivate && !is_admin()) {
+                $conn->execute_query("INSERT IGNORE INTO group_requests (group_id, user_id, created_at) VALUES (?, ?, NOW())", [$groupId, $currentUser['id']]);
+                $redirect = !empty($_REQUEST['redirect']) ? $_REQUEST['redirect'] : "index.php?group=$groupId&msg=request_sent";
+                header("Location: $redirect");
+                exit;
+            } else {
+                $conn->execute_query("INSERT IGNORE INTO group_members (group_id, user_id, joined_at) VALUES (?, ?, NOW())", [$groupId, $currentUser['id']]);
+                $conn->execute_query("DELETE FROM group_requests WHERE group_id = ? AND user_id = ?", [$groupId, $currentUser['id']]);
+            }
+        }
+    }
     $redirect = !empty($_REQUEST['redirect']) ? $_REQUEST['redirect'] : "index.php?group=$groupId&msg=joined";
-
     header("Location: $redirect");
-
     exit;
+}
 
+// Cancel Group Join Request
+if ($action === 'cancel_group_request') {
+    if (!$currentUser) {
+        header("Location: login.php");
+        exit;
+    }
+    $groupId = (int)($_REQUEST['group_id'] ?? 0);
+    if ($groupId > 0) {
+        $conn->execute_query("DELETE FROM group_requests WHERE group_id = ? AND user_id = ?", [$groupId, $currentUser['id']]);
+    }
+    $redirect = !empty($_REQUEST['redirect']) ? $_REQUEST['redirect'] : "index.php?group=$groupId&msg=request_cancelled";
+    header("Location: $redirect");
+    exit;
+}
+
+// Admin: Approve Join Request
+if ($action === 'approve_group_request') {
+    if (!$currentUser || !is_admin()) {
+        header("Location: index.php?error=unauthorized");
+        exit;
+    }
+    $groupId = (int)($_REQUEST['group_id'] ?? 0);
+    $reqUserId = (int)($_REQUEST['user_id'] ?? 0);
+    if ($groupId > 0 && $reqUserId > 0) {
+        $conn->execute_query("INSERT IGNORE INTO group_members (group_id, user_id, joined_at) VALUES (?, ?, NOW())", [$groupId, $reqUserId]);
+        $conn->execute_query("DELETE FROM group_requests WHERE group_id = ? AND user_id = ?", [$groupId, $reqUserId]);
+    }
+    $redirect = !empty($_REQUEST['redirect']) ? $_REQUEST['redirect'] : "index.php?group=$groupId&msg=request_approved";
+    header("Location: $redirect");
+    exit;
+}
+
+// Admin: Reject Join Request
+if ($action === 'reject_group_request') {
+    if (!$currentUser || !is_admin()) {
+        header("Location: index.php?error=unauthorized");
+        exit;
+    }
+    $groupId = (int)($_REQUEST['group_id'] ?? 0);
+    $reqUserId = (int)($_REQUEST['user_id'] ?? 0);
+    if ($groupId > 0 && $reqUserId > 0) {
+        $conn->execute_query("DELETE FROM group_requests WHERE group_id = ? AND user_id = ?", [$groupId, $reqUserId]);
+    }
+    $redirect = !empty($_REQUEST['redirect']) ? $_REQUEST['redirect'] : "index.php?group=$groupId&msg=request_rejected";
+    header("Location: $redirect");
+    exit;
 }
 
 
@@ -333,6 +388,7 @@ if ($action === 'leave_group') {
         }
 
         $conn->execute_query("DELETE FROM group_members WHERE group_id = ? AND user_id = ?", [$groupId, $currentUser['id']]);
+        $conn->execute_query("DELETE FROM group_requests WHERE group_id = ? AND user_id = ?", [$groupId, $currentUser['id']]);
 
     }
 
@@ -366,7 +422,9 @@ if ($action === 'create_group') {
 
     $description = trim($_POST['description'] ?? '');
 
-    $status      = in_array($_POST['status'] ?? '', ['active', 'restricted']) ? $_POST['status'] : 'active';
+    $rawStatus   = $_POST['status'] ?? 'public';
+    if ($rawStatus === 'active') $rawStatus = 'public';
+    $status      = in_array($rawStatus, ['public', 'private', 'restricted']) ? $rawStatus : 'public';
 
     $imageUrl    = upload_single_image($_FILES['group_image'] ?? null);
 
@@ -422,7 +480,9 @@ if ($action === 'edit_group') {
 
     $description = trim($_POST['description'] ?? '');
 
-    $status      = in_array($_POST['status'] ?? '', ['active', 'restricted']) ? $_POST['status'] : 'active';
+    $rawStatus   = $_POST['status'] ?? 'public';
+    if ($rawStatus === 'active') $rawStatus = 'public';
+    $status      = in_array($rawStatus, ['public', 'private', 'restricted']) ? $rawStatus : 'public';
 
     $newImage    = upload_single_image($_FILES['group_image'] ?? null);
 
@@ -472,9 +532,13 @@ if ($action === 'toggle_group_status') {
 
     }
 
-    $groupId = (int)($_REQUEST['group_id'] ?? 0);
-
-    $status  = ($_REQUEST['status'] ?? '') === 'restricted' ? 'restricted' : 'active';
+    $groupId   = (int)($_REQUEST['group_id'] ?? 0);
+    $rawStatus = $_REQUEST['status'] ?? '';
+    if (in_array($rawStatus, ['public', 'private', 'restricted'], true)) {
+        $status = $rawStatus;
+    } else {
+        $status = 'public';
+    }
 
     if ($groupId > 0) {
 
@@ -482,7 +546,11 @@ if ($action === 'toggle_group_status') {
 
     }
 
-    $redirect = !empty($_REQUEST['redirect']) ? $_REQUEST['redirect'] : "index.php?group=$groupId&msg=status_updated";
+    $redirect = !empty($_REQUEST['redirect']) ? $_REQUEST['redirect'] : "index.php?group=$groupId";
+    if (strpos($redirect, 'msg=') === false) {
+        $separator = (strpos($redirect, '?') === false) ? '?' : '&';
+        $redirect .= $separator . 'msg=status_updated';
+    }
 
     header("Location: $redirect");
 
@@ -564,7 +632,7 @@ if ($action === 'create_post') {
         $respondError('The selected group could not be found.', 'index.php?error=group_not_found', 'group_id');
     }
 
-    if ($grp['status'] !== 'active') {
+    if ($grp['status'] === 'restricted') {
         $respondError('This group is currently restricted and cannot accept new discussions.', "index.php?group=$groupId&error=group_restricted", 'group_id');
     }
 
@@ -774,6 +842,11 @@ if ($action === 'create_reply') {
 
     if ($postRow['group_status'] === 'restricted' && !is_admin()) {
         header("Location: index.php?group={$postRow['group_id']}&post=$postId&error=group_restricted");
+        exit;
+    }
+
+    if (!is_admin() && !is_group_member((int)$currentUser['id'], (int)$postRow['group_id'], $conn)) {
+        header("Location: index.php?group={$postRow['group_id']}&post=$postId&error=must_join_group");
         exit;
     }
 
@@ -989,7 +1062,7 @@ if (!empty($userJoinedGroupIds)) {
 
     $userJoinedGroups = $conn->execute_query(
 
-        "SELECT id, name, description, status, image_url, (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = groups.id) as member_count FROM groups WHERE id IN ($placeholders) AND status = 'active' ORDER BY name ASC",
+        "SELECT id, name, description, status, image_url, (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = groups.id) as member_count FROM groups WHERE id IN ($placeholders) AND status IN ('active', 'public', 'private') ORDER BY name ASC",
 
         $userJoinedGroupIds
 
@@ -1002,6 +1075,11 @@ if (!empty($userJoinedGroupIds)) {
 // If viewing a specific group
 
 $currentGroup = null;
+$isGroupPrivate = false;
+$isGroupMember = false;
+$canViewPrivateGroup = true;
+$hasPendingRequest = false;
+$groupPendingRequests = [];
 
 if ($selected_group_id > 0) {
 
@@ -1020,6 +1098,23 @@ if ($selected_group_id > 0) {
         WHERE g.id = ?
 
     ", [$currentUserId, $selected_group_id])->fetch_assoc();
+
+    if ($currentGroup) {
+        $isGroupPrivate = (($currentGroup['status'] ?? '') === 'private');
+        $isGroupMember = ((int)($currentGroup['is_member'] ?? 0) > 0);
+        $canViewPrivateGroup = (!$isGroupPrivate || is_admin() || $isGroupMember);
+        $hasPendingRequest = ($currentUser && !$isGroupMember) ? has_group_request($currentUserId, $selected_group_id, $conn) : false;
+
+        if (is_admin()) {
+            $groupPendingRequests = $conn->execute_query("
+                SELECT gr.id as req_id, gr.user_id, gr.created_at, u.name, u.email, u.avatar, u.role
+                FROM group_requests gr
+                JOIN users u ON gr.user_id = u.id
+                WHERE gr.group_id = ?
+                ORDER BY gr.created_at ASC
+            ", [$selected_group_id])->fetch_all(MYSQLI_ASSOC);
+        }
+    }
 
 }
 
@@ -1087,7 +1182,7 @@ if ($current_view === 'admin') {
 
     $stats['total_groups'] = (int)$conn->query("SELECT COUNT(*) FROM groups")->fetch_row()[0];
 
-    $stats['active_groups'] = (int)$conn->query("SELECT COUNT(*) FROM groups WHERE status = 'active'")->fetch_row()[0];
+    $stats['active_groups'] = (int)$conn->query("SELECT COUNT(*) FROM groups WHERE status != 'restricted'")->fetch_row()[0];
 
     $stats['total_posts'] = (int)$conn->query("SELECT COUNT(*) FROM posts")->fetch_row()[0];
 
@@ -1183,25 +1278,30 @@ if ($current_view !== 'admin' && $current_view !== 'groups') {
 
     } elseif ($selected_group_id > 0) {
 
-        $sql .= " WHERE p.group_id = ?";
+        if ($isGroupPrivate && !$canViewPrivateGroup) {
+            $sql .= " WHERE 1=0";
+        } else {
+            $sql .= " WHERE p.group_id = ?";
+            $params[] = $selected_group_id;
 
-        $params[] = $selected_group_id;
-
-        if ($search_query !== '') {
-
-            $sql .= " AND (p.title LIKE ? OR p.content LIKE ?)";
-
-            $params[] = "%$search_query%";
-
-            $params[] = "%$search_query%";
-
+            if ($search_query !== '') {
+                $sql .= " AND (p.title LIKE ? OR p.content LIKE ?)";
+                $params[] = "%$search_query%";
+                $params[] = "%$search_query%";
+            }
         }
 
     } else {
 
-        // Home feed: recent discussions from all active groups
-
-        $sql .= " WHERE g.status = 'active'";
+        // Home feed: discussions from public groups, or private groups where user is member/admin
+        if ($currentUser && is_admin()) {
+            $sql .= " WHERE g.status IN ('active', 'public', 'private')";
+        } elseif ($currentUser) {
+            $sql .= " WHERE (g.status IN ('active', 'public') OR (g.status = 'private' AND EXISTS (SELECT 1 FROM group_members gm WHERE gm.group_id = g.id AND gm.user_id = ?)))";
+            $params[] = (int)$currentUser['id'];
+        } else {
+            $sql .= " WHERE g.status IN ('active', 'public')";
+        }
 
         if ($search_query !== '') {
 
@@ -1228,6 +1328,18 @@ if ($current_view !== 'admin' && $current_view !== 'groups') {
     }
 
     $posts = $conn->execute_query($sql, $params)->fetch_all(MYSQLI_ASSOC);
+
+    // If viewing single post directly, verify private group access
+    if ($single_post_id > 0 && !empty($posts)) {
+        $firstP = $posts[0];
+        if (($firstP['group_status'] ?? '') === 'private') {
+            $canViewSingle = (is_admin() || ($currentUser && is_group_member((int)$currentUser['id'], (int)$firstP['group_id'], $conn)));
+            if (!$canViewSingle) {
+                header("Location: index.php?group=" . (int)$firstP['group_id'] . "&error=private_group");
+                exit;
+            }
+        }
+    }
 
     $post_ids = array_column($posts, 'id');
 
@@ -1291,7 +1403,7 @@ $recentDiscussions = $conn->query("
 
     JOIN users u ON p.user_id = u.id
 
-    WHERE g.status = 'active'
+    WHERE g.status IN ('active', 'public')
 
     ORDER BY p.created_at DESC LIMIT 5
 
@@ -1309,7 +1421,7 @@ $popularGroups = $conn->execute_query("
 
     FROM groups g
 
-    WHERE g.status = 'active'
+    WHERE g.status IN ('active', 'public')
 
     ORDER BY member_count DESC, g.id ASC
 
@@ -1753,6 +1865,46 @@ HTML PART starts here
 
       </div>
 
+    <?php elseif ($msgType === 'request_sent'): ?>
+
+      <div style="background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.35); color: #c084fc; padding: 12px 16px; border-radius: 14px; margin-bottom: 16px; font-size: 13.5px; font-weight: 600;">
+
+        ⏳ Request submitted! Your membership request has been sent to the group administrator for approval.
+
+      </div>
+
+    <?php elseif ($msgType === 'request_cancelled'): ?>
+
+      <div style="background: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.3); color: var(--text-main); padding: 12px 16px; border-radius: 14px; margin-bottom: 16px; font-size: 13.5px; font-weight: 600;">
+
+        Your group membership request has been cancelled.
+
+      </div>
+
+    <?php elseif ($msgType === 'request_approved'): ?>
+
+      <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); color: #6ee7b7; padding: 12px 16px; border-radius: 14px; margin-bottom: 16px; font-size: 13.5px; font-weight: 600;">
+
+        ✓ Membership request approved successfully!
+
+      </div>
+
+    <?php elseif ($msgType === 'request_rejected'): ?>
+
+      <div style="background: rgba(244, 33, 46, 0.15); border: 1px solid rgba(244, 33, 46, 0.35); color: #fca5a5; padding: 12px 16px; border-radius: 14px; margin-bottom: 16px; font-size: 13.5px; font-weight: 600;">
+
+        Membership request was rejected.
+
+      </div>
+
+    <?php elseif ($errType === 'private_group'): ?>
+
+      <div style="background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.35); color: #c084fc; padding: 12px 16px; border-radius: 14px; margin-bottom: 16px; font-size: 13.5px; font-weight: 600;">
+
+        🔒 This group is private. Only approved members can view its discussions.
+
+      </div>
+
     <?php elseif ($errType === 'must_join_group'): ?>
 
       <div style="background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.35); color: #fbbf24; padding: 12px 16px; border-radius: 14px; margin-bottom: 16px; font-size: 13.5px; font-weight: 600;">
@@ -1999,11 +2151,7 @@ HTML PART starts here
                         <a href="index.php?group=<?= (int)$ag['id'] ?>" class="admin-group-name">
                           <?= e($ag['name']) ?>
                         </a>
-                        <?php if ($ag['status'] === 'active'): ?>
-                          <span class="group-status-badge status-active" title="Members can create new discussions in this group">Active</span>
-                        <?php else: ?>
-                          <span class="group-status-badge status-restricted" title="New discussions are paused; existing posts remain readable">Restricted</span>
-                        <?php endif; ?>
+                        <?= render_group_status_badge($ag['status'] ?? 'public') ?>
                       </div>
                       <p class="admin-group-desc"><?= e($ag['description'] ?: 'No description provided.') ?></p>
                       <div class="admin-group-meta">
@@ -2025,21 +2173,40 @@ HTML PART starts here
                       <span>Edit</span>
                     </button>
 
-                    <?php if ($ag['status'] === 'active'): ?>
+                    <?php if (($ag['status'] ?? '') === 'private'): ?>
+                      <a href="index.php?action=toggle_group_status&group_id=<?= (int)$ag['id'] ?>&status=public&redirect=<?= urlencode('index.php?view=admin') ?>" class="btn-admin-action btn-admin-ok" title="Make group public so anyone can view and join">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <circle cx="12" cy="12" r="10"></circle>
+                          <line x1="2" y1="12" x2="22" y2="12"></line>
+                          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                        </svg>
+                        <span>Make Public</span>
+                      </a>
+                    <?php else: ?>
+                      <a href="index.php?action=toggle_group_status&group_id=<?= (int)$ag['id'] ?>&status=private&redirect=<?= urlencode('index.php?view=admin') ?>" class="btn-admin-action btn-admin-purple" title="Make group private requiring admin approval to join">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                        </svg>
+                        <span>Make Private</span>
+                      </a>
+                    <?php endif; ?>
+
+                    <?php if (($ag['status'] ?? '') === 'restricted'): ?>
+                      <a href="index.php?action=toggle_group_status&group_id=<?= (int)$ag['id'] ?>&status=public&redirect=<?= urlencode('index.php?view=admin') ?>" class="btn-admin-action btn-admin-ok" title="Activate group to allow new discussions">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                          <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+                        </svg>
+                        <span>Activate</span>
+                      </a>
+                    <?php else: ?>
                       <a href="index.php?action=toggle_group_status&group_id=<?= (int)$ag['id'] ?>&status=restricted&redirect=<?= urlencode('index.php?view=admin') ?>" class="btn-admin-action btn-admin-warn" title="Restrict group to pause new discussions">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                           <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                           <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                         </svg>
                         <span>Restrict</span>
-                      </a>
-                    <?php else: ?>
-                      <a href="index.php?action=toggle_group_status&group_id=<?= (int)$ag['id'] ?>&status=active&redirect=<?= urlencode('index.php?view=admin') ?>" class="btn-admin-action btn-admin-ok" title="Activate group to allow new discussions">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                          <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
-                        </svg>
-                        <span>Activate</span>
                       </a>
                     <?php endif; ?>
 
@@ -2194,11 +2361,7 @@ HTML PART starts here
 
               <div class="group-card">
 
-                <?php if ($isRestricted): ?>
-                  <span class="group-status-badge status-restricted">Restricted</span>
-                <?php else: ?>
-                  <span class="group-status-badge status-active">Active</span>
-                <?php endif; ?>
+                <?= render_group_status_badge($g['status'] ?? 'public') ?>
 
                 <div class="group-card-body">
 
@@ -2249,7 +2412,7 @@ HTML PART starts here
 
                   <a href="index.php?group=<?= (int)$g['id'] ?>" class="btn-view-group" title="View Discussions">
 
-                    <span>View Discussions</span>
+                    <span>View</span>
 
                   </a>
 
@@ -2272,11 +2435,22 @@ HTML PART starts here
 
                   <?php else: ?>
 
-                    <a href="index.php?action=join_group&group_id=<?= (int)$g['id'] ?>&redirect=<?= urlencode('index.php?view=groups') ?>" class="btn-join-group">
-
-                      Join
-
-                    </a>
+                    <?php if (($g['status'] ?? '') === 'private' && !is_admin()): ?>
+                      <?php $hasCardReq = ($currentUser ? has_group_request((int)$currentUser['id'], (int)$g['id'], $conn) : false); ?>
+                      <?php if ($hasCardReq): ?>
+                        <span class="btn-group-pending" style="padding: 6px 12px; font-size: 12px; font-weight: 600; border-radius: 9999px; background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.35);">
+                          Pending
+                        </span>
+                      <?php else: ?>
+                        <a href="index.php?action=join_group&group_id=<?= (int)$g['id'] ?>&redirect=<?= urlencode('index.php?view=groups') ?>" class="btn-join-group" style="background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4);">
+                          Request
+                        </a>
+                      <?php endif; ?>
+                    <?php else: ?>
+                      <a href="index.php?action=join_group&group_id=<?= (int)$g['id'] ?>&redirect=<?= urlencode('index.php?view=groups') ?>" class="btn-join-group">
+                        Join
+                      </a>
+                    <?php endif; ?>
 
                   <?php endif; ?>
 
@@ -2391,15 +2565,7 @@ HTML PART starts here
 
                   <h1 class="group-header-title"><?= e($currentGroup['name']) ?></h1>
 
-                  <?php if ($currentGroup['status'] === 'active'): ?>
-
-                    <span class="group-status-badge status-active">Active</span>
-
-                  <?php else: ?>
-
-                    <span class="group-status-badge status-restricted">Restricted</span>
-
-                  <?php endif; ?>
+                  <?= render_group_status_badge($currentGroup['status'] ?? 'public') ?>
 
                 </div>
 
@@ -2465,11 +2631,24 @@ HTML PART starts here
 
               <?php else: ?>
 
-                <a href="index.php?action=join_group&group_id=<?= $selected_group_id ?>&redirect=<?= urlencode("index.php?group=$selected_group_id") ?>" class="btn-join-group">
-
-                  + Join Group
-
-                </a>
+                <?php if ($isGroupPrivate && !is_admin()): ?>
+                  <?php if ($hasPendingRequest): ?>
+                    <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 700; color: #c084fc; background: rgba(168, 85, 247, 0.15); padding: 6px 14px; border-radius: 9999px; border: 1px solid rgba(168, 85, 247, 0.35);">
+                      ⏳ Request Pending
+                    </span>
+                    <a href="index.php?action=cancel_group_request&group_id=<?= $selected_group_id ?>&redirect=<?= urlencode("index.php?group=$selected_group_id&msg=request_cancelled") ?>" class="btn-leave-group" style="margin-left: 6px;">
+                      Cancel
+                    </a>
+                  <?php else: ?>
+                    <a href="<?= $currentUser ? "index.php?action=join_group&group_id=$selected_group_id&redirect=" . urlencode("index.php?group=$selected_group_id") : "register.php" ?>" class="btn-join-group" style="background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4);">
+                      🔒 Request to Join
+                    </a>
+                  <?php endif; ?>
+                <?php else: ?>
+                  <a href="<?= $currentUser ? "index.php?action=join_group&group_id=$selected_group_id&redirect=" . urlencode("index.php?group=$selected_group_id") : "register.php" ?>" class="btn-join-group">
+                    + Join Group
+                  </a>
+                <?php endif; ?>
 
               <?php endif; ?>
 
@@ -2525,18 +2704,30 @@ HTML PART starts here
                 <span>Edit Group</span>
               </button>
 
-              <?php if ($currentGroup['status'] === 'active'): ?>
-
-                <a href="index.php?action=toggle_group_status&group_id=<?= $selected_group_id ?>&status=restricted&redirect=<?= urlencode("index.php?group=$selected_group_id") ?>" class="btn-admin-action btn-admin-warn">
+              <?php if (($currentGroup['status'] ?? '') === 'private'): ?>
+                <a href="index.php?action=toggle_group_status&group_id=<?= $selected_group_id ?>&status=public&redirect=<?= urlencode("index.php?group=$selected_group_id") ?>" class="btn-admin-action btn-admin-ok" title="Make group public so anyone can view and join">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                  <span>Make Public</span>
+                </a>
+              <?php else: ?>
+                <a href="index.php?action=toggle_group_status&group_id=<?= $selected_group_id ?>&status=private&redirect=<?= urlencode("index.php?group=$selected_group_id") ?>" class="btn-admin-action btn-admin-purple" title="Make group private requiring admin approval to join">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                  <span>Restrict Group</span>
+                  <span>Make Private</span>
+                </a>
+              <?php endif; ?>
+
+              <?php if (($currentGroup['status'] ?? '') === 'restricted'): ?>
+
+                <a href="index.php?action=toggle_group_status&group_id=<?= $selected_group_id ?>&status=public&redirect=<?= urlencode("index.php?group=$selected_group_id") ?>" class="btn-admin-action btn-admin-ok" title="Activate group to allow new discussions">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
+                  <span>Activate Group</span>
                 </a>
 
               <?php else: ?>
 
-                <a href="index.php?action=toggle_group_status&group_id=<?= $selected_group_id ?>&status=active&redirect=<?= urlencode("index.php?group=$selected_group_id") ?>" class="btn-admin-action btn-admin-ok">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
-                  <span>Activate Group</span>
+                <a href="index.php?action=toggle_group_status&group_id=<?= $selected_group_id ?>&status=restricted&redirect=<?= urlencode("index.php?group=$selected_group_id") ?>" class="btn-admin-action btn-admin-warn" title="Restrict group to pause new discussions">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                  <span>Restrict Group</span>
                 </a>
 
               <?php endif; ?>
@@ -2548,6 +2739,35 @@ HTML PART starts here
 
             </div>
 
+            <?php if (!empty($groupPendingRequests)): ?>
+              <div class="group-admin-requests-panel" style="background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.28); border-radius: 16px; padding: 16px 20px; margin-top: 14px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                  <h3 style="margin: 0; font-size: 13.5px; font-weight: 700; color: #c084fc; display: flex; align-items: center; gap: 8px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
+                    Pending Membership Requests (<?= count($groupPendingRequests) ?>)
+                  </h3>
+                  <span style="font-size: 12px; color: var(--text-muted);">Admin approval required to join</span>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                  <?php foreach ($groupPendingRequests as $req): ?>
+                    <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-card); border: 1px solid var(--border-color); padding: 10px 14px; border-radius: 12px; gap: 12px; flex-wrap: wrap;">
+                      <div style="display: flex; align-items: center; gap: 10px;">
+                        <img src="<?= e($req['avatar'] ?: 'assets/images/default-avatar.png') ?>" style="width: 34px; height: 34px; border-radius: 50%; object-fit: cover;">
+                        <div>
+                          <div style="font-size: 13.5px; font-weight: 600; color: var(--text-main);"><?= e($req['name']) ?> <span style="font-size: 11px; color: var(--text-muted);">(<?= e($req['role']) ?>)</span></div>
+                          <div style="font-size: 11.5px; color: var(--text-muted);"><?= e($req['email']) ?> · Requested <?= date('M j, Y g:i a', strtotime($req['created_at'])) ?></div>
+                        </div>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 8px;">
+                        <a href="index.php?action=approve_group_request&req_id=<?= (int)$req['req_id'] ?>&group_id=<?= $selected_group_id ?>&redirect=<?= urlencode("index.php?group=$selected_group_id&msg=request_approved") ?>" class="btn-admin-action btn-admin-ok" style="padding: 5px 12px; font-size: 12px; text-decoration: none;">Approve</a>
+                        <a href="index.php?action=reject_group_request&req_id=<?= (int)$req['req_id'] ?>&group_id=<?= $selected_group_id ?>&redirect=<?= urlencode("index.php?group=$selected_group_id&msg=request_rejected") ?>" class="btn-admin-action btn-admin-danger" style="padding: 5px 12px; font-size: 12px; text-decoration: none;">Reject</a>
+                      </div>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+              </div>
+            <?php endif; ?>
+
           <?php endif; ?>
 
         </div>
@@ -2556,7 +2776,11 @@ HTML PART starts here
 
         <!-- Composer for Group View -->
 
-        <?php if ($currentUser && (int)$currentGroup['is_member'] > 0 && $currentGroup['status'] === 'active'): ?>
+        <?php if ($isGroupPrivate && !$canViewPrivateGroup): ?>
+
+          <!-- Private group: Non-members cannot compose or view posts -->
+
+        <?php elseif ($currentUser && (int)$currentGroup['is_member'] > 0 && ($currentGroup['status'] ?? '') !== 'restricted'): ?>
 
           <div class="x-quick-composer" onclick="openCreateThreadModal(<?= $selected_group_id ?>)">
 
@@ -2716,7 +2940,43 @@ HTML PART starts here
 
       <div class="posts-feed" id="posts-feed-container">
 
-        <?php if (!empty($posts)): ?>
+        <?php if ($selected_group_id > 0 && $isGroupPrivate && !$canViewPrivateGroup): ?>
+
+          <!-- Private Group Locked View for Non-Members -->
+          <div class="private-group-locked-card" style="text-align: center; padding: 56px 28px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; margin-top: 10px; max-width: 600px; margin-left: auto; margin-right: auto;">
+            <div style="width: 64px; height: 64px; border-radius: 50%; background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.3); display: flex; align-items: center; justify-content: center; color: #c084fc;">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+            </div>
+            <h2 style="font-size: 20px; font-weight: 800; color: var(--text-main); margin: 0;">This Group is Private</h2>
+            <p style="font-size: 14px; color: var(--text-muted); max-width: 420px; line-height: 1.5; margin: 0;">
+              Only approved members can view discussions and participate in <strong><?= e($currentGroup['name']) ?></strong>.
+            </p>
+            <?php if ($currentUser): ?>
+              <?php if ($hasPendingRequest): ?>
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 8px;">
+                  <span style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; border-radius: 9999px; background: rgba(168, 85, 247, 0.15); color: #c084fc; font-weight: 700; font-size: 13.5px; border: 1px solid rgba(168, 85, 247, 0.35);">
+                    ⏳ Request Pending Admin Approval
+                  </span>
+                  <a href="index.php?action=cancel_group_request&group_id=<?= $selected_group_id ?>&redirect=<?= urlencode("index.php?group=$selected_group_id&msg=request_cancelled") ?>" style="font-size: 12.5px; color: var(--text-muted); text-decoration: underline;">
+                    Cancel Request
+                  </a>
+                </div>
+              <?php else: ?>
+                <a href="index.php?action=join_group&group_id=<?= $selected_group_id ?>&redirect=<?= urlencode("index.php?group=$selected_group_id") ?>" class="btn-join-group" style="margin-top: 8px; padding: 10px 24px; font-size: 14px; background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4);">
+                  🔒 Request to Join Group
+                </a>
+              <?php endif; ?>
+            <?php else: ?>
+              <a href="register.php" class="btn-join-group" style="margin-top: 8px; padding: 10px 24px; font-size: 14px;">
+                Register / Sign In to Request Access
+              </a>
+            <?php endif; ?>
+          </div>
+
+        <?php elseif (!empty($posts)): ?>
 
           <?php foreach ($posts as $post): ?>
 
@@ -2742,6 +3002,7 @@ HTML PART starts here
               $isPostGroupRestricted = (($post['group_status'] ?? 'active') === 'restricted');
               $canModifyPost = (!$isPostGroupRestricted || is_admin());
               $isPinned = ($isGroupFeed && !empty($post['is_pinned']));
+              $isPostGroupMember = ($currentUser && (is_admin() || is_group_member((int)$currentUser['id'], (int)$post['group_id'], $conn)));
             ?>
             <article class="post-card post-card-reddit<?= $isPinned ? ' is-pinned-post' : '' ?>" id="post-<?= $postId ?>" data-post-id="<?= $postId ?>" onclick="handlePostCardClick(event, <?= $postId ?>, <?= (int)$post['group_id'] ?>)" style="cursor: pointer;">
 
@@ -2976,7 +3237,7 @@ HTML PART starts here
                     <span><strong>Restricted Group:</strong> Posting and replying are currently unavailable.</span>
                   </div>
 
-                  <?php elseif ($currentUser): ?>
+                  <?php elseif ($isPostGroupMember): ?>
 
                   <form action="index.php" method="POST" enctype="multipart/form-data" class="reply-composer-form" id="reply-form-<?= $postId ?>" style="margin-bottom: 16px; padding: 12px; background: var(--bg-input); border-radius: 14px; border: 1px solid var(--border-color);">
 
@@ -3047,6 +3308,20 @@ HTML PART starts here
                     </div>
 
                   </form>
+
+                  <?php elseif ($currentUser): ?>
+
+                  <div style="margin-bottom: 16px; padding: 12px 16px; background: var(--bg-card); border-radius: 14px; border: 1px dashed var(--border-color); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+
+                    <span style="font-size: 13px; color: var(--text-muted);">
+                      Join <strong><?= e($post['group_name']) ?></strong> to reply and participate in this discussion.
+                    </span>
+
+                    <a href="index.php?action=join_group&group_id=<?= (int)$post['group_id'] ?>&redirect=<?= urlencode("index.php?group=" . (int)$post['group_id'] . "&post=$postId#post-$postId") ?>" class="btn-join-group" style="padding: 6px 14px; font-size: 12.5px;">
+                      Join Group
+                    </a>
+
+                  </div>
 
                   <?php else: ?>
 
@@ -3123,7 +3398,7 @@ HTML PART starts here
 
                       <?php foreach ($topLevelReplies as $rep): ?>
 
-                        <?php renderReplyNode($rep, $childrenByParent, $repliesById, $currentUser, $postId, 0, $isPostGroupRestricted); ?>
+                        <?php renderReplyNode($rep, $childrenByParent, $repliesById, $currentUser, $postId, 0, $isPostGroupRestricted, $isPostGroupMember); ?>
 
                       <?php endforeach; ?>
 
@@ -3670,20 +3945,25 @@ HTML PART starts here
           <label class="form-label">Initial Status</label>
 
           <div class="admin-status-dropdown modal-status-dropdown" data-modal-status-dropdown>
-            <input type="hidden" name="status" id="new-group-status" value="active">
+            <input type="hidden" name="status" id="new-group-status" value="public">
             <button type="button" class="admin-status-trigger modal-status-trigger" aria-haspopup="listbox" aria-expanded="false">
               <span class="modal-status-trigger-left">
                 <span class="admin-status-dot dot-active" data-status-dot></span>
-                <span class="admin-status-label" data-status-label>Active (Students can join and publish discussions)</span>
+                <span class="admin-status-label" data-status-label>Public (Open for everyone)</span>
               </span>
               <svg class="admin-status-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="6 9 12 15 18 9"></polyline>
               </svg>
             </button>
             <div class="admin-status-menu modal-status-menu" role="listbox" aria-label="Initial Status">
-              <button type="button" class="admin-status-option active" role="option" aria-selected="true" data-value="active" data-label="Active (Students can join and publish discussions)" data-dot="dot-active">
+              <button type="button" class="admin-status-option active" role="option" aria-selected="true" data-value="public" data-label="Public (Open for everyone)" data-dot="dot-active">
                 <span class="admin-status-dot dot-active"></span>
-                <span class="admin-status-option-text">Active (Students can join and publish discussions)</span>
+                <span class="admin-status-option-text">Public (Open for everyone)</span>
+                <svg class="admin-status-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </button>
+              <button type="button" class="admin-status-option" role="option" aria-selected="false" data-value="private" data-label="Private (Requires admin approval)" data-dot="dot-private">
+                <span class="admin-status-dot dot-private"></span>
+                <span class="admin-status-option-text">Private (Requires admin approval)</span>
                 <svg class="admin-status-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
               </button>
               <button type="button" class="admin-status-option" role="option" aria-selected="false" data-value="restricted" data-label="Restricted (Discussions paused)" data-dot="dot-restricted">
@@ -3795,25 +4075,30 @@ HTML PART starts here
           <label class="form-label">Group Status</label>
 
           <div class="admin-status-dropdown modal-status-dropdown" data-modal-status-dropdown>
-            <input type="hidden" name="status" id="edit-group-status" value="active">
+            <input type="hidden" name="status" id="edit-group-status" value="public">
             <button type="button" class="admin-status-trigger modal-status-trigger" aria-haspopup="listbox" aria-expanded="false">
               <span class="modal-status-trigger-left">
                 <span class="admin-status-dot dot-active" data-status-dot></span>
-                <span class="admin-status-label" data-status-label>Active (Open for discussions)</span>
+                <span class="admin-status-label" data-status-label>Public (Open for everyone)</span>
               </span>
               <svg class="admin-status-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="6 9 12 15 18 9"></polyline>
               </svg>
             </button>
             <div class="admin-status-menu modal-status-menu" role="listbox" aria-label="Group Status">
-              <button type="button" class="admin-status-option active" role="option" aria-selected="true" data-value="active" data-label="Active (Open for discussions)" data-dot="dot-active">
+              <button type="button" class="admin-status-option active" role="option" aria-selected="true" data-value="public" data-label="Public (Open for everyone)" data-dot="dot-active">
                 <span class="admin-status-dot dot-active"></span>
-                <span class="admin-status-option-text">Active (Open for discussions)</span>
+                <span class="admin-status-option-text">Public (Open for everyone)</span>
                 <svg class="admin-status-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
               </button>
-              <button type="button" class="admin-status-option" role="option" aria-selected="false" data-value="restricted" data-label="Restricted (Paused for posting)" data-dot="dot-restricted">
+              <button type="button" class="admin-status-option" role="option" aria-selected="false" data-value="private" data-label="Private (Requires admin approval)" data-dot="dot-private">
+                <span class="admin-status-dot dot-private"></span>
+                <span class="admin-status-option-text">Private (Requires admin approval)</span>
+                <svg class="admin-status-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </button>
+              <button type="button" class="admin-status-option" role="option" aria-selected="false" data-value="restricted" data-label="Restricted (Discussions paused)" data-dot="dot-restricted">
                 <span class="admin-status-dot dot-restricted"></span>
-                <span class="admin-status-option-text">Restricted (Paused for posting)</span>
+                <span class="admin-status-option-text">Restricted (Discussions paused)</span>
                 <svg class="admin-status-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
               </button>
             </div>
@@ -4057,6 +4342,7 @@ function openEditGroupModal(id, name, desc, status) {
   if (descInput) descInput.value = desc;
 
   if (statusInput) {
+    if (status === 'active') status = 'public';
     statusInput.value = status;
     if (typeof window.syncModalStatusDropdown === 'function') {
       window.syncModalStatusDropdown('edit-group-status', status);

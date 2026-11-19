@@ -3105,6 +3105,12 @@ a.post-group-author-link:hover .author-name {
   border: 1px solid rgba(245, 158, 11, 0.35);
 }
 
+.group-status-badge.status-private {
+  background: rgba(139, 92, 246, 0.15);
+  color: #a78bfa;
+  border: 1px solid rgba(139, 92, 246, 0.35);
+}
+
 .group-header-desc {
   font-size: 14.5px;
   line-height: 1.55;
@@ -3427,29 +3433,34 @@ a.post-group-author-link:hover .author-name {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   padding-top: 10px;
   margin-top: 8px;
   border-top: 1px solid var(--border-subtle);
 }
 
-.btn-view-group {
-  flex: 1;
+.group-card-actions .btn-view-group,
+.group-card-actions .btn-join-group,
+.group-card-actions .btn-leave-group {
+  flex: 1 1 0;
   min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 8px;
-  font-size: 11.5px;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
   font-weight: 600;
   border-radius: 9999px;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.btn-view-group {
   background: var(--bg-widget);
   color: var(--text-main);
   border: 1px solid var(--border-color);
   text-decoration: none;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
@@ -3457,14 +3468,6 @@ a.post-group-author-link:hover .author-name {
   background: var(--bg-widget-hover);
   border-color: var(--border-hover);
   color: var(--text-main);
-}
-
-.group-card-actions .btn-join-group,
-.group-card-actions .btn-leave-group {
-  font-size: 11.5px;
-  padding: 6px 12px;
-  white-space: nowrap;
-  flex-shrink: 0;
 }
 
 /* Profile Page Groups Tab List Overrides */
@@ -3899,6 +3902,10 @@ a.post-group-author-link:hover .author-name {
   background: var(--accent-amber);
 }
 
+.admin-status-dot.dot-private {
+  background: #a78bfa;
+}
+
 .admin-status-menu {
   position: absolute;
   top: calc(100% + 6px);
@@ -4057,6 +4064,17 @@ a.post-group-author-link:hover .author-name {
 
 .btn-admin-action.btn-admin-ok:hover {
   border-color: rgba(0, 186, 124, 0.5);
+}
+
+.btn-admin-action.btn-admin-purple {
+  color: #c084fc;
+  border-color: rgba(168, 85, 247, 0.28);
+  background: rgba(168, 85, 247, 0.1);
+}
+
+.btn-admin-action.btn-admin-purple:hover {
+  border-color: rgba(168, 85, 247, 0.55);
+  background: rgba(168, 85, 247, 0.18);
 }
 
 .btn-admin-action.btn-admin-danger {
@@ -4329,6 +4347,23 @@ select:focus-visible {
   background: #fef3c7;
   color: #b45309;
   border-color: #fcd34d;
+}
+
+[data-theme="light"] .group-status-badge.status-private {
+  background: #ede9fe;
+  color: #6d28d9;
+  border-color: #c4b5fd;
+}
+
+[data-theme="light"] .btn-admin-action.btn-admin-purple {
+  background: #ede9fe;
+  color: #6d28d9;
+  border-color: #c4b5fd;
+}
+
+[data-theme="light"] .btn-admin-action.btn-admin-purple:hover {
+  background: #ddd6fe;
+  border-color: #a78bfa;
 }
 
 [data-theme="light"] .groups-count-pill {
@@ -5040,6 +5075,7 @@ select:focus-visible {
 /* Full-width Modal Status Dropdown */
 .modal-status-dropdown {
   width: 100%;
+  position: relative;
 }
 
 .modal-status-trigger {
@@ -5049,6 +5085,18 @@ select:focus-visible {
   padding: 0 14px;
   font-size: 14px;
   font-weight: 500;
+  border-radius: var(--radius-md, 10px);
+  background: var(--bg-input, #000);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.modal-status-dropdown.open .modal-status-trigger,
+.modal-status-trigger:focus-visible {
+  border-color: var(--primary-blue);
+  box-shadow: 0 0 0 1px var(--primary-blue);
+  background: var(--bg-input, #000);
 }
 
 .modal-status-trigger-left {
@@ -5068,6 +5116,70 @@ select:focus-visible {
   left: 0;
   right: 0;
   width: 100%;
+  top: calc(100% + 6px);
+  padding: 6px;
+  background: var(--bg-modal, #16181c);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 10px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+}
+
+.modal-status-menu .admin-status-option {
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  width: 100%;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.modal-status-menu .admin-status-option:hover {
+  background: var(--bg-card-hover, rgba(255, 255, 255, 0.05));
+}
+
+.modal-status-menu .admin-status-option.active {
+  background: var(--primary-blue-light, rgba(29, 155, 240, 0.12));
+  color: var(--primary-blue);
+  font-weight: 600;
+}
+
+.modal-status-menu .admin-status-check {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--primary-blue);
+}
+
+[data-theme="light"] .modal-status-trigger {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+[data-theme="light"] .modal-status-dropdown.open .modal-status-trigger,
+[data-theme="light"] .modal-status-trigger:focus-visible {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px #2563eb;
+  background: #ffffff;
+}
+
+[data-theme="light"] .modal-status-menu {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+}
+
+[data-theme="light"] .modal-status-menu .admin-status-option:hover {
+  background: #f1f5f9;
+}
+
+[data-theme="light"] .modal-status-menu .admin-status-option.active {
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 
 /* Pinned Post Indicator */

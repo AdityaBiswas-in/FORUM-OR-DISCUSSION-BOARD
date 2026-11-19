@@ -144,3 +144,27 @@ if (!function_exists('is_group_member')) {
         return (bool)$stmt->fetch_row();
     }
 }
+
+// Helper: Check if a user has a pending join request in a group
+if (!function_exists('has_group_request')) {
+    function has_group_request(int $userId, int $groupId, mysqli $conn): bool {
+        if ($userId <= 0 || $groupId <= 0) return false;
+        $stmt = $conn->execute_query("SELECT 1 FROM group_requests WHERE user_id = ? AND group_id = ? LIMIT 1", [$userId, $groupId]);
+        return (bool)$stmt->fetch_row();
+    }
+}
+
+// Helper: Render consistent status badge for groups (Public, Private, Restricted)
+if (!function_exists('render_group_status_badge')) {
+    function render_group_status_badge(string $status, string $extraStyle = ''): string {
+        $status = ($status === 'active') ? 'public' : $status;
+        $styleAttr = $extraStyle !== '' ? " style=\"$extraStyle\"" : '';
+        if ($status === 'private') {
+            return "<span class=\"group-status-badge status-private\"$styleAttr title=\"Private: Admin approval required to join\"><svg width=\"11\" height=\"11\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.4\" style=\"display: inline-block; vertical-align: -1px; margin-right: 3px;\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"></rect><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"></path></svg>Private</span>";
+        } elseif ($status === 'restricted') {
+            return "<span class=\"group-status-badge status-restricted\"$styleAttr title=\"Restricted: Discussions are paused\"><svg width=\"11\" height=\"11\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.4\" style=\"display: inline-block; vertical-align: -1px; margin-right: 3px;\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"></rect><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"></path></svg>Restricted</span>";
+        } else {
+            return "<span class=\"group-status-badge status-active\"$styleAttr title=\"Public: Open to everyone\"><svg width=\"11\" height=\"11\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.4\" style=\"display: inline-block; vertical-align: -1px; margin-right: 3px;\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><line x1=\"2\" y1=\"12\" x2=\"22\" y2=\"12\"></line><path d=\"M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z\"></path></svg>Public</span>";
+        }
+    }
+}
