@@ -23,128 +23,139 @@ if (!function_exists('e')) {
     }
 }
 
+// Helper: Format message and post text with safe rich text (Bold, Italic, Strikethrough, Headings, Bullet Lists, Links, Code)
+if (!function_exists('render_rich_formatted_text')) {
+    function render_rich_formatted_text(?string $str = '', bool $isAnnouncement = false): string {
+        if ($str === null || $str === '') return '';
+
+        // Step 1: Normalize line endings
+        $text = str_replace(["\r\n", "\r"], "\n", $str);
+
+        // Step 2: Normalize inline headings and bullet points if squashed without newlines
+        $text = preg_replace('/(?<!\n)\s+(#{1,3})\s+/', "\n\n$1 ", $text);
+        $text = preg_replace('/(?<!\n)\s+([•\-\*])\s+(\*\*|__)/u', "\n$1 $2", $text);
+
+        // Step 3: Protect inline code blocks e.g. `code`
+        $codeBlocks = [];
+        $text = preg_replace_callback('/`([^`]+)`/', function($m) use (&$codeBlocks) {
+            $idx = count($codeBlocks);
+            $escaped = htmlspecialchars($m[1], ENT_QUOTES, 'UTF-8');
+            $codeBlocks[$idx] = '<code style="background: rgba(255, 255, 255, 0.08); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.9em; color: #38bdf8;">' . $escaped . '</code>';
+            return "%%CODEBLOCK_{$idx}%%";
+        }, $text);
+
+        // If text already has HTML block tags (like <p>, <ul>, <h3> from rich editor), sanitize them
+        $hasHtmlTags = preg_match('/<(?:p|ul|ol|li|h[1-6]|div|blockquote|table|b|strong|i|em|u|s|del)[^>]*>/i', $text);
+        if ($hasHtmlTags) {
+            $allowedTags = '<b><strong><i><em><s><del><strike><u><h3><h4><h5><p><br><div><span><blockquote><ul><ol><li><a><code><pre>';
+            $text = strip_tags($text, $allowedTags);
+            $text = preg_replace('/\s+on\w+\s*=\s*(["\']).*?\1/i', '', $text);
+            $text = preg_replace('/javascript:/i', '', $text);
+        } else {
+            // Safe encode raw HTML entities
+            $text = htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+        }
+
+        // Step 4: Headings: ### Heading or ## Heading
+        if ($isAnnouncement) {
+            $text = preg_replace('/^(?:<p>)?\s*#{1,3}\s+(.+?)(?:<\/p>)?$/m', '<h3 class="announcement-section-heading" style="font-size: 16.5px; font-weight: 700; color: #ffffff; margin: 20px 0 10px 0; padding-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.08); display: block;">$1</h3>', $text);
+        } else {
+            $text = preg_replace('/^(?:<p>)?\s*#{1,3}\s+(.+?)(?:<\/p>)?$/m', '<strong class="post-heading" style="font-size: 1.15em; font-weight: 700; display: inline-block; margin: 8px 0 4px 0; color: var(--text-main);">$1</strong>', $text);
+        }
+
+        // Step 5: Parse bullet and numbered lists BEFORE bold/italic
+        $lines = explode("\n", $text);
+        $inUl = false;
+        $inOl = false;
+        $processed = [];
+
+        $ulStyle = $isAnnouncement ? 
+            'margin: 10px 0 14px 22px; padding-left: 4px; line-height: 1.75; color: #e2e8f0; list-style-type: disc;' :
+            'padding-left: 22px; margin: 6px 0 10px 0; list-style-type: disc; color: var(--text-main);';
+
+        foreach ($lines as $line) {
+            $trimmed = trim($line);
+
+            // Check bullet line: starts with * or - or •
+            if (preg_match('/^(?:<p>)?\s*[•\-\*]\s+(.+?)(?:<\/p>)?$/u', $trimmed, $m)) {
+                if ($inOl) { $processed[] = '</ol>'; $inOl = false; }
+                if (!$inUl) {
+                    $processed[] = '<ul class="announcement-bullet-list" style="' . $ulStyle . '">';
+                    $inUl = true;
+                }
+                $processed[] = '<li style="margin-bottom: 6px;">' . $m[1] . '</li>';
+                continue;
+            }
+
+            // Check numbered list line: starts with 1. 2. etc
+            if (preg_match('/^(?:<p>)?\s*(\d+)\.\s+(.+?)(?:<\/p>)?$/u', $trimmed, $m)) {
+                if ($inUl) { $processed[] = '</ul>'; $inUl = false; }
+                if (!$inOl) {
+                    $processed[] = '<ol style="padding-left: 24px; margin: 6px 0 10px 0; color: var(--text-main);">';
+                    $inOl = true;
+                }
+                $processed[] = '<li style="margin-bottom: 6px;">' . $m[2] . '</li>';
+                continue;
+            }
+
+            // Not a list item
+            if ($inUl) { $processed[] = '</ul>'; $inUl = false; }
+            if ($inOl) { $processed[] = '</ol>'; $inOl = false; }
+            $processed[] = $line;
+        }
+        if ($inUl) { $processed[] = '</ul>'; }
+        if ($inOl) { $processed[] = '</ol>'; }
+
+        $html = implode("\n", $processed);
+
+        // Step 6: Bold: **text** or __text__
+        $boldColor = $isAnnouncement ? '#f1f5f9' : 'var(--text-main)';
+        $html = preg_replace('/\*\*(.+?)\*\*/s', '<strong style="font-weight: 700; color: ' . $boldColor . ';">$1</strong>', $html);
+        $html = preg_replace('/__(.+?)__/s', '<strong style="font-weight: 700; color: ' . $boldColor . ';">$1</strong>', $html);
+
+        // Step 7: Italic: *text* or _text_ (excluding inside words or URLs)
+        $html = preg_replace('/(?<![\*\w])\*(?!\*)(.+?)(?<![\*\w])\*(?![\*\w])/s', '<em style="font-style: italic;">$1</em>', $html);
+        $html = preg_replace('/(?<![_\w])_(?!_)(.+?)(?<![_\w])_(?![_\w])/s', '<em style="font-style: italic;">$1</em>', $html);
+
+        // Step 8: Strikethrough: ~~text~~
+        $html = preg_replace('/~~(.+?)~~/s', '<del style="text-decoration: line-through;">$1</del>', $html);
+
+        // Step 9: Markdown link: [text](url)
+        $linkColor = $isAnnouncement ? '#38bdf8' : 'var(--primary-blue)';
+        $html = preg_replace('/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/', '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: ' . $linkColor . '; text-decoration: underline;">$1</a>', $html);
+
+        // Auto-link bare URLs (if not already inside an <a> tag)
+        $html = preg_replace('/(?<!href=")(https?:\/\/[^\s<]+)/', '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: ' . $linkColor . '; text-decoration: underline;">$1</a>', $html);
+
+        // Step 10: Restore inline code blocks
+        foreach ($codeBlocks as $idx => $codeHtml) {
+            $html = str_replace("%%CODEBLOCK_{$idx}%%", $codeHtml, $html);
+        }
+
+        // Step 11: Add line breaks for paragraphs if not already rich HTML
+        if (!$hasHtmlTags) {
+            $html = nl2br($html);
+            $html = preg_replace('/(<(?:ul|ol)[^>]*>)\s*<br\s*\/?>/i', '$1', $html);
+            $html = preg_replace('/<br\s*\/?>\s*(<\/?(?:ul|ol|li)[^>]*>)/i', '$1', $html);
+            $html = preg_replace('/(<\/(?:li|ul|ol)>)\s*<br\s*\/?>/i', '$1', $html);
+            $html = preg_replace('/(<\/h[1-6]>)\s*<br\s*\/?>/i', '$1', $html);
+        }
+
+        return $html;
+    }
+}
+
 // Helper: Format post and reply text with safe rich text (Bold, Italic, Strikethrough, Headings) & Markdown fallback
 if (!function_exists('format_post_content')) {
     function format_post_content(?string $str = ''): string {
-        if ($str === null || $str === '') return '';
-
-        // If string contains HTML tags from visual rich editor
-        if (preg_match('/<[a-z][\s\S]*>/i', $str)) {
-            $allowedTags = '<b><strong><i><em><s><del><strike><u><h3><h4><h5><p><br><div><span><blockquote><ul><ol><li><a>';
-            $safe = strip_tags($str, $allowedTags);
-            // Strip any malicious script/event attributes
-            $safe = preg_replace('/\s+on\w+\s*=\s*(["\']).*?\1/i', '', $safe);
-            $safe = preg_replace('/javascript:/i', '', $safe);
-            $safe = preg_replace('/\s+style\s*=\s*(["\']).*?\1/i', '', $safe);
-            return $safe;
-        }
-
-        // Markdown fallback
-        $safe = htmlspecialchars($str, ENT_QUOTES, 'UTF-8');
-        $safe = preg_replace('/^(#{1,3})\s+(.+)$/m', '<strong class="post-heading" style="font-size: 1.15em; display: inline-block; margin: 4px 0;">$2</strong>', $safe);
-        $safe = preg_replace('/\*\*(.+?)\*\*/s', '<strong>$1</strong>', $safe);
-        $safe = preg_replace('/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/s', '<em>$1</em>', $safe);
-        $safe = preg_replace('/~~(.+?)~~/s', '<del>$1</del>', $safe);
-        $safe = preg_replace('/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/', '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: var(--primary-blue); text-decoration: underline;">$1</a>', $safe);
-
-        // Bullet list lines starting with • or - or *
-        $lines = explode("\n", $safe);
-        $inList = false;
-        $processed = [];
-        foreach ($lines as $line) {
-            $trimmed = trim($line);
-            if (preg_match('/^[•\-\*]\s+(.+)$/u', $trimmed, $m)) {
-                if (!$inList) {
-                    $processed[] = '<ul style="padding-left: 22px; margin: 6px 0 10px 0; list-style-type: disc;">';
-                    $inList = true;
-                }
-                $processed[] = '<li style="margin-bottom: 3px;">' . $m[1] . '</li>';
-            } else {
-                if ($inList) {
-                    $processed[] = '</ul>';
-                    $inList = false;
-                }
-                $processed[] = $line;
-            }
-        }
-        if ($inList) {
-            $processed[] = '</ul>';
-        }
-        $safe = implode("\n", $processed);
-        $res = nl2br($safe);
-        $res = preg_replace('/(<(?:ul|ol)[^>]*>)\s*<br\s*\/?>/i', '$1', $res);
-        $res = preg_replace('/<br\s*\/?>\s*(<\/?(?:ul|ol|li)[^>]*>)/i', '$1', $res);
-        $res = preg_replace('/(<\/(?:li|ul|ol)>)\s*<br\s*\/?>/i', '$1', $res);
-        return $res;
+        return render_rich_formatted_text($str, false);
     }
 }
 
 // Helper: Format official group announcements into structured classic forum layouts (Headings, Bullet points, Links)
 if (!function_exists('format_announcement_content')) {
     function format_announcement_content(?string $str = ''): string {
-        if ($str === null || $str === '') return '';
-
-        // If string already contains HTML tags from visual rich editor
-        if (preg_match('/<[a-z][\s\S]*>/i', $str)) {
-            $allowedTags = '<b><strong><i><em><s><del><strike><u><h3><h4><h5><p><br><div><span><blockquote><ul><ol><li><a>';
-            $safe = strip_tags($str, $allowedTags);
-            $safe = preg_replace('/\s+on\w+\s*=\s*(["\']).*?\1/i', '', $safe);
-            $safe = preg_replace('/javascript:/i', '', $safe);
-            return $safe;
-        }
-
-        // Markdown fallback
-        $safe = htmlspecialchars($str, ENT_QUOTES, 'UTF-8');
-
-        // Section Headings (e.g. ### What you need to do)
-        $safe = preg_replace('/^(#{1,3})\s+(.+)$/m', '<h3 class="announcement-section-heading" style="font-size: 16.5px; font-weight: 700; color: #ffffff; margin: 22px 0 10px 0; padding-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.08); display: block;">$2</h3>', $safe);
-
-        // Bold: **text**
-        $safe = preg_replace('/\*\*(.+?)\*\*/s', '<strong style="color: #f1f5f9; font-weight: 700;">$1</strong>', $safe);
-
-        // Italic: *text*
-        $safe = preg_replace('/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/s', '<em>$1</em>', $safe);
-
-        // Markdown link [title](url)
-        $safe = preg_replace('/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/', '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: #38bdf8; text-decoration: underline;">$1</a>', $safe);
-
-        // Auto-link bare URLs
-        $safe = preg_replace('/(?<!href=")(https?:\/\/[^\s<]+)/', '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #38bdf8; text-decoration: underline;">$1</a>', $safe);
-
-        // Parse bullet points lines starting with • or - or * into <ul><li>
-        $lines = explode("\n", $safe);
-        $inList = false;
-        $processed = [];
-
-        foreach ($lines as $line) {
-            $trimmed = trim($line);
-            if (preg_match('/^[•\-\*]\s+(.+)$/u', $trimmed, $m)) {
-                if (!$inList) {
-                    $processed[] = '<ul class="announcement-bullet-list" style="margin: 10px 0 14px 22px; padding-left: 4px; line-height: 1.75; color: #e2e8f0; list-style-type: disc;">';
-                    $inList = true;
-                }
-                $processed[] = '<li style="margin-bottom: 6px;">' . $m[1] . '</li>';
-            } else {
-                if ($inList) {
-                    $processed[] = '</ul>';
-                    $inList = false;
-                }
-                $processed[] = $line;
-            }
-        }
-        if ($inList) {
-            $processed[] = '</ul>';
-        }
-
-        $html = nl2br(implode("\n", $processed));
-        $html = preg_replace('/(<(?:ul|ol)[^>]*>)\s*<br\s*\/?>/i', '$1', $html);
-        $html = preg_replace('/<br\s*\/?>\s*(<\/(?:ul|ol)>)/i', '$1', $html);
-        $html = preg_replace('/(<li[^>]*>)\s*<br\s*\/?>/i', '$1', $html);
-        $html = preg_replace('/<br\s*\/?>\s*(<\/li>)/i', '$1', $html);
-        $html = preg_replace('/<\/li>\s*<br\s*\/?>/i', '</li>', $html);
-        $html = preg_replace('/(<\/h[1-6]>)\s*<br\s*\/?>/i', '$1', $html);
-
-        return $html;
+        return render_rich_formatted_text($str, true);
     }
 }
 
