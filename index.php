@@ -342,10 +342,24 @@ if ($action === 'approve_group_request') {
         header("Location: index.php?error=unauthorized");
         exit;
     }
-    $groupId = (int)($_REQUEST['group_id'] ?? 0);
+    $groupId   = (int)($_REQUEST['group_id'] ?? 0);
     $reqUserId = (int)($_REQUEST['user_id'] ?? 0);
+    $reqId     = (int)($_REQUEST['req_id'] ?? 0);
+
+    // If req_id is provided, resolve group_id and user_id if needed
+    if ($reqId > 0 && ($groupId <= 0 || $reqUserId <= 0)) {
+        $reqRow = $conn->execute_query("SELECT group_id, user_id FROM group_requests WHERE id = ?", [$reqId])->fetch_assoc();
+        if ($reqRow) {
+            if ($groupId <= 0) $groupId = (int)$reqRow['group_id'];
+            if ($reqUserId <= 0) $reqUserId = (int)$reqRow['user_id'];
+        }
+    }
+
     if ($groupId > 0 && $reqUserId > 0) {
         $conn->execute_query("INSERT IGNORE INTO group_members (group_id, user_id, joined_at) VALUES (?, ?, NOW())", [$groupId, $reqUserId]);
+        if ($reqId > 0) {
+            $conn->execute_query("DELETE FROM group_requests WHERE id = ?", [$reqId]);
+        }
         $conn->execute_query("DELETE FROM group_requests WHERE group_id = ? AND user_id = ?", [$groupId, $reqUserId]);
     }
     $redirect = !empty($_REQUEST['redirect']) ? $_REQUEST['redirect'] : "index.php?group=$groupId&msg=request_approved";
@@ -359,8 +373,22 @@ if ($action === 'reject_group_request') {
         header("Location: index.php?error=unauthorized");
         exit;
     }
-    $groupId = (int)($_REQUEST['group_id'] ?? 0);
+    $groupId   = (int)($_REQUEST['group_id'] ?? 0);
     $reqUserId = (int)($_REQUEST['user_id'] ?? 0);
+    $reqId     = (int)($_REQUEST['req_id'] ?? 0);
+
+    // If req_id is provided, resolve group_id and user_id if needed
+    if ($reqId > 0 && ($groupId <= 0 || $reqUserId <= 0)) {
+        $reqRow = $conn->execute_query("SELECT group_id, user_id FROM group_requests WHERE id = ?", [$reqId])->fetch_assoc();
+        if ($reqRow) {
+            if ($groupId <= 0) $groupId = (int)$reqRow['group_id'];
+            if ($reqUserId <= 0) $reqUserId = (int)$reqRow['user_id'];
+        }
+    }
+
+    if ($reqId > 0) {
+        $conn->execute_query("DELETE FROM group_requests WHERE id = ?", [$reqId]);
+    }
     if ($groupId > 0 && $reqUserId > 0) {
         $conn->execute_query("DELETE FROM group_requests WHERE group_id = ? AND user_id = ?", [$groupId, $reqUserId]);
     }
@@ -3075,8 +3103,8 @@ HTML PART starts here
                         </div>
                       </div>
                       <div style="display: flex; align-items: center; gap: 8px;">
-                        <a href="index.php?action=approve_group_request&req_id=<?= (int)$req['req_id'] ?>&group_id=<?= $selected_group_id ?>&redirect=<?= urlencode("index.php?group=$selected_group_id&msg=request_approved") ?>" class="btn-admin-action btn-admin-ok" style="padding: 5px 12px; font-size: 12px; text-decoration: none;">Approve</a>
-                        <a href="index.php?action=reject_group_request&req_id=<?= (int)$req['req_id'] ?>&group_id=<?= $selected_group_id ?>&redirect=<?= urlencode("index.php?group=$selected_group_id&msg=request_rejected") ?>" class="btn-admin-action btn-admin-danger" style="padding: 5px 12px; font-size: 12px; text-decoration: none;">Reject</a>
+                        <a href="index.php?action=approve_group_request&req_id=<?= (int)$req['req_id'] ?>&user_id=<?= (int)$req['user_id'] ?>&group_id=<?= $selected_group_id ?>&redirect=<?= urlencode("index.php?group=$selected_group_id&msg=request_approved") ?>" class="btn-admin-action btn-admin-ok" style="padding: 5px 12px; font-size: 12px; text-decoration: none;">Approve</a>
+                        <a href="index.php?action=reject_group_request&req_id=<?= (int)$req['req_id'] ?>&user_id=<?= (int)$req['user_id'] ?>&group_id=<?= $selected_group_id ?>&redirect=<?= urlencode("index.php?group=$selected_group_id&msg=request_rejected") ?>" class="btn-admin-action btn-admin-danger" style="padding: 5px 12px; font-size: 12px; text-decoration: none;">Reject</a>
                       </div>
                     </div>
                   <?php endforeach; ?>
