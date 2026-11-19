@@ -1819,6 +1819,51 @@ img, svg {
   font-size: 13.5px !important;
 }
 
+.reply-rich-editor.rich-editor:has(b)::before,
+.reply-rich-editor.rich-editor:has(strong)::before,
+.reply-rich-editor.rich-editor:has(i)::before,
+.reply-rich-editor.rich-editor:has(em)::before,
+.reply-rich-editor.rich-editor:has(u)::before,
+.reply-rich-editor.rich-editor:has(s)::before,
+.reply-rich-editor.rich-editor:has(strike)::before,
+.reply-rich-editor.rich-editor:has(del)::before,
+.reply-rich-editor.rich-editor:has(ul)::before,
+.reply-rich-editor.rich-editor:has(ol)::before,
+.reply-rich-editor.rich-editor:has(li)::before,
+.reply-rich-editor.rich-editor:has(h1, h2, h3, h4, h5, h6)::before,
+.reply-rich-editor.rich-editor:has(a)::before {
+  display: none !important;
+}
+
+.reply-rich-editor b,
+.reply-rich-editor strong,
+.rich-editor b,
+.rich-editor strong {
+  font-weight: 700 !important;
+  color: var(--text-main) !important;
+}
+
+.reply-rich-editor i,
+.reply-rich-editor em,
+.rich-editor i,
+.rich-editor em {
+  font-style: italic !important;
+}
+
+.reply-rich-editor u,
+.rich-editor u {
+  text-decoration: underline !important;
+}
+
+.reply-rich-editor s,
+.reply-rich-editor strike,
+.reply-rich-editor del,
+.rich-editor s,
+.rich-editor strike,
+.rich-editor del {
+  text-decoration: line-through !important;
+}
+
 .reply-body-text ul,
 .reply-body-text ol {
   padding-left: 22px !important;

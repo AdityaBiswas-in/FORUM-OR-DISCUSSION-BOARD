@@ -970,24 +970,25 @@ function syncRichEditor(editor) {
   }
   if (!textarea) return;
 
-  const text = editor.innerText.trim();
+  const rawText = editor.innerText || '';
+  const cleanText = rawText.replace(/\u200B/g, '').trim();
   const hasFormatting = editor.querySelector('ul, ol, li, h1, h2, h3, h4, h5, h6, s, strike, del, a, b, strong, i, em, u, img');
-  if (text.length === 0 && !hasFormatting) {
+
+  if (cleanText.length === 0 && !hasFormatting) {
     textarea.value = '';
     editor.setAttribute('data-empty', 'true');
+  } else if (cleanText.length === 0) {
+    textarea.value = '';
+    editor.removeAttribute('data-empty');
   } else {
-    textarea.value = editor.innerHTML;
+    textarea.value = editor.innerHTML.replace(/\u200B/g, '');
     editor.removeAttribute('data-empty');
   }
   textarea.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 function getActiveRichEditor(toolbar) {
-  // 1. Check focused element
-  const active = document.activeElement;
-  if (active && active.classList && active.classList.contains('rich-editor')) return active;
-
-  // 2. Check toolbar data-target
+  // 1. Explicit data-target or container on the toolbar takes FIRST priority
   if (toolbar) {
     const targetId = toolbar.getAttribute('data-target');
     if (targetId) {
@@ -1007,6 +1008,10 @@ function getActiveRichEditor(toolbar) {
     }
   }
 
+  // 2. Focused element if it is a rich editor
+  const active = document.activeElement;
+  if (active && active.classList && active.classList.contains('rich-editor')) return active;
+
   // 3. Fallback to open modals
   const activeModal = document.querySelector('.modal-overlay.active, .modal-overlay[style*="display: block"], .modal-overlay[style*="display: flex"]');
   if (activeModal) {
@@ -1014,7 +1019,7 @@ function getActiveRichEditor(toolbar) {
     if (editor) return editor;
   }
 
-  // 4. Default post composer only if toolbar belongs to it
+  // 4. Default post composer only if toolbar belongs to it or no specific toolbar
   if (!toolbar || toolbar.closest('#modal-create-thread') || toolbar.closest('.x-quick-composer') || toolbar.closest('.x-compose-box')) {
     const defaultPostEditor = document.getElementById('post-content-editor');
     if (defaultPostEditor) return defaultPostEditor;
@@ -1030,10 +1035,7 @@ function ensureEditorFocus(editor) {
   if (!sel || sel.rangeCount === 0 || !editor.contains(sel.anchorNode)) {
     const range = document.createRange();
     if (!editor.firstChild) {
-      const p = document.createElement('p');
-      p.innerHTML = '<br>';
-      editor.appendChild(p);
-      range.setStart(p, 0);
+      range.setStart(editor, 0);
       range.collapse(true);
     } else {
       range.selectNodeContents(editor);
@@ -1116,6 +1118,103 @@ function updateToolbarStates(editor) {
       if (aBtn) aBtn.classList.toggle('active', !!isLink);
     }
   });
+}
+
+function toggleInlineFormat(editor, formatType) {
+  if (!editor) return;
+  ensureEditorFocus(editor);
+
+  const formatConfig = {
+    bold: { tag: 'b', selector: 'b, strong', cmd: 'bold' },
+    italic: { tag: 'i', selector: 'i, em', cmd: 'italic' },
+    underline: { tag: 'u', selector: 'u', cmd: 'underline' },
+    strike: { tag: 'del', selector: 's, strike, del', cmd: 'strikeThrough' }
+  };
+
+  const config = formatConfig[formatType];
+  if (!config) return;
+
+  const sel = window.getSelection();
+  if (!sel || !editor.contains(sel.anchorNode)) return;
+
+  const hasSelection = !sel.isCollapsed && sel.toString().length > 0;
+
+  if (hasSelection) {
+    try {
+      document.execCommand(config.cmd, false, null);
+    } catch (e) {}
+    syncRichEditor(editor);
+    updateToolbarStates(editor);
+    return;
+  }
+
+  // Collapsed selection: user toggling style before typing
+  const range = sel.getRangeAt(0);
+  const parent = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
+  const existingNode = parent ? parent.closest(config.selector) : null;
+
+  if (existingNode && editor.contains(existingNode)) {
+    // Toggle OFF:
+    const cleanText = (existingNode.textContent || '').replace(/\u200B/g, '');
+    if (cleanText.length === 0) {
+      const p = existingNode.parentNode;
+      const placeholder = document.createTextNode('\u200B');
+      p.replaceChild(placeholder, existingNode);
+      const newRange = document.createRange();
+      newRange.setStart(placeholder, 1);
+      newRange.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+    } else {
+      let next = existingNode.nextSibling;
+      if (!next || next.nodeType !== 3) {
+        next = document.createTextNode('\u200B');
+        if (existingNode.nextSibling) {
+          existingNode.parentNode.insertBefore(next, existingNode.nextSibling);
+        } else {
+          existingNode.parentNode.appendChild(next);
+        }
+      }
+      const newRange = document.createRange();
+      newRange.setStart(next, next.nodeType === 3 ? Math.min(1, next.length) : 0);
+      newRange.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+    }
+    try {
+      document.execCommand(config.cmd, false, null);
+    } catch (e) {}
+  } else {
+    // Toggle ON:
+    const el = document.createElement(config.tag);
+    el.innerHTML = '&#8203;';
+
+    const editorText = (editor.innerText || '').replace(/\u200B/g, '').trim();
+    if (!editorText && (!editor.firstChild || editor.innerHTML === '' || editor.innerHTML === '<br>' || editor.innerHTML === '<p><br></p>' || editor.innerHTML === '<div><br></div>')) {
+      editor.innerHTML = '';
+      editor.appendChild(el);
+    } else {
+      range.deleteContents();
+      range.insertNode(el);
+    }
+
+    const newRange = document.createRange();
+    if (el.firstChild) {
+      newRange.setStart(el.firstChild, 1);
+    } else {
+      newRange.setStart(el, 0);
+    }
+    newRange.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(newRange);
+
+    try {
+      document.execCommand(config.cmd, false, null);
+    } catch (e) {}
+  }
+
+  syncRichEditor(editor);
+  updateToolbarStates(editor);
 }
 
 function applyVisualFormat(editor, formatType) {
@@ -1204,66 +1303,9 @@ function applyVisualFormat(editor, formatType) {
         }
       }
     }
-  } else if (formatType === 'bold') {
-    document.execCommand('bold', false, null);
-  } else if (formatType === 'italic') {
-    document.execCommand('italic', false, null);
-  } else if (formatType === 'underline') {
-    document.execCommand('underline', false, null);
-  } else if (formatType === 'strike') {
-    let strikeNode = null;
-    if (sel && sel.anchorNode && editor.contains(sel.anchorNode)) {
-      const parent = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
-      strikeNode = parent ? parent.closest('s, strike, del') : null;
-    }
-
-    if (strikeNode) {
-      // Toggle OFF: unwrap strike node
-      const parent = strikeNode.parentNode;
-      const range = document.createRange();
-      range.selectNodeContents(strikeNode);
-      while (strikeNode.firstChild) {
-        parent.insertBefore(strikeNode.firstChild, strikeNode);
-      }
-      parent.removeChild(strikeNode);
-      if (sel) {
-        sel.removeAllRanges();
-        sel.addRange(range);
-      }
-    } else {
-      // Toggle ON:
-      const text = editor.innerText.trim();
-      const isEmpty = !text && (!editor.firstChild || editor.innerHTML === '' || editor.innerHTML === '<br>' || editor.innerHTML === '<p><br></p>' || editor.innerHTML === '<div><br></div>');
-      if (isEmpty) {
-        editor.innerHTML = '<del><br></del>';
-        const del = editor.querySelector('del');
-        if (del && sel) {
-          const range = document.createRange();
-          range.setStart(del, 0);
-          range.collapse(true);
-          sel.removeAllRanges();
-          sel.addRange(range);
-        }
-      } else {
-        try {
-          document.execCommand('strikeThrough', false, null);
-        } catch (e) {}
-
-        if (sel && !sel.isCollapsed && sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
-          const checkNode = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
-          if (!checkNode.closest('s, strike, del')) {
-            const range = sel.getRangeAt(0);
-            const del = document.createElement('del');
-            del.appendChild(range.extractContents());
-            range.insertNode(del);
-            const newRange = document.createRange();
-            newRange.selectNodeContents(del);
-            sel.removeAllRanges();
-            sel.addRange(newRange);
-          }
-        }
-      }
-    }
+  } else if (formatType === 'bold' || formatType === 'italic' || formatType === 'underline' || formatType === 'strike') {
+    toggleInlineFormat(editor, formatType);
+    return;
   } else if (formatType === 'bullet' || formatType === 'list') {
     let listNode = null;
     if (sel && sel.anchorNode && editor.contains(sel.anchorNode)) {
@@ -1417,12 +1459,14 @@ function applyVisualFormat(editor, formatType) {
   updateToolbarStates(editor);
 }
 
-// Prevent format buttons from stealing selection focus on mousedown
-document.addEventListener('mousedown', (e) => {
-  const btn = e.target.closest('.format-btn');
-  if (btn) {
-    e.preventDefault();
-  }
+// Prevent format buttons from stealing selection focus on mousedown / pointerdown / touchstart
+['mousedown', 'pointerdown', 'touchstart'].forEach(evtName => {
+  document.addEventListener(evtName, (e) => {
+    const btn = e.target.closest('.format-btn');
+    if (btn) {
+      e.preventDefault();
+    }
+  });
 });
 
 // Click listener for format buttons
@@ -1535,12 +1579,31 @@ document.addEventListener('submit', (e) => {
       const fileInput = form.querySelector('input[name="reply_image"]');
       const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
       if (editor) {
-        const text = editor.innerText.trim();
+        const text = (editor.innerText || '').replace(/\u200B/g, '').trim();
         const hasList = editor.querySelector('ul, ol, li');
         if (!text && !hasList && !hasFile) {
           e.preventDefault();
           editor.focus();
         }
+      }
+    }
+  }
+});
+
+// Keyboard shortcuts for formatting (Ctrl/Cmd + B, I, U)
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+    const key = (e.key || '').toLowerCase();
+    let format = null;
+    if (key === 'b') format = 'bold';
+    else if (key === 'i') format = 'italic';
+    else if (key === 'u') format = 'underline';
+
+    if (format) {
+      const active = document.activeElement;
+      if (active && active.classList && active.classList.contains('rich-editor')) {
+        e.preventDefault();
+        applyVisualFormat(active, format);
       }
     }
   }

@@ -3890,9 +3890,9 @@ HTML PART starts here
 
     <div class="recent-discussions-card" style="margin-bottom: 16px;">
 
-      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; min-width: 0;">
 
-        <h3 class="recent-card-header" style="margin: 0; padding: 0; font-size: 15px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;">
+        <h3 class="recent-card-header" style="margin: 0; padding: 0; font-size: 15px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">
 
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary-blue); flex-shrink: 0;">
 
@@ -3904,11 +3904,17 @@ HTML PART starts here
 
           </svg>
 
-          <span>Latest Announcements</span>
+          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Announcements</span>
 
         </h3>
 
         <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+
+          <?php if (!empty($groupNotices)): ?>
+
+            <a href="index.php?group=<?= $selected_group_id ?>&view=announcements" style="font-size: 12px; font-weight: 700; color: var(--primary-blue); text-decoration: none; white-space: nowrap;">View All</a>
+
+          <?php endif; ?>
 
           <?php if (is_admin()): ?>
 
@@ -3919,10 +3925,6 @@ HTML PART starts here
               <span>Add</span>
 
             </button>
-
-          <?php elseif (!empty($groupNotices)): ?>
-
-            <a href="index.php?group=<?= $selected_group_id ?>&view=announcements" style="font-size: 12px; font-weight: 700; color: var(--primary-blue); text-decoration: none; white-space: nowrap;">View All</a>
 
           <?php endif; ?>
 
