@@ -302,6 +302,11 @@ if ($action === 'join_group') {
     }
     $groupId = (int)($_REQUEST['group_id'] ?? 0);
     if ($groupId > 0) {
+        $banCheck = $conn->execute_query("SELECT id FROM group_bans WHERE group_id = ? AND user_id = ?", [$groupId, $currentUser['id']])->fetch_assoc();
+        if ($banCheck) {
+            header("Location: index.php?group=$groupId&error=banned_from_group");
+            exit;
+        }
         $grp = $conn->execute_query("SELECT id, status FROM groups WHERE id = ?", [$groupId])->fetch_assoc();
         if ($grp) {
             $isPrivate = (($grp['status'] ?? '') === 'private');
@@ -437,6 +442,281 @@ if ($action === 'leave_group') {
 
     exit;
 
+}
+
+
+
+// ========================================================
+// GROUP MEMBER MANAGEMENT (View, Remove & Ban Members)
+// ========================================================
+
+// 1. Fetch Group Members (AJAX)
+if ($action === 'get_group_members') {
+    header('Content-Type: application/json');
+    $groupId = (int)($_REQUEST['group_id'] ?? 0);
+    if ($groupId <= 0) {
+        echo json_encode(['success' => false, 'message' => 'Invalid group ID.']);
+        exit;
+    }
+
+    $grp = $conn->execute_query("SELECT id, name, created_by, status FROM groups WHERE id = ?", [$groupId])->fetch_assoc();
+    if (!$grp) {
+        echo json_encode(['success' => false, 'message' => 'Group not found.']);
+        exit;
+    }
+
+    $members = [];
+    $mStmt = $conn->execute_query(
+        "SELECT u.id, u.name, u.username, u.email, u.avatar, u.role, u.account_type, gm.joined_at,
+                (CASE WHEN ? = u.id THEN 1 ELSE 0 END) AS is_creator
+         FROM group_members gm
+         JOIN users u ON gm.user_id = u.id
+         WHERE gm.group_id = ?
+         ORDER BY is_creator DESC, gm.joined_at ASC",
+        [(int)$grp['created_by'], $groupId]
+    );
+
+    $defaultAvatar = 'assets/images/default-avatar.svg';
+    $curId = $currentUser ? (int)$currentUser['id'] : 0;
+    $isAdmin = is_admin();
+
+    while ($row = $mStmt->fetch_assoc()) {
+        $uRole = strtolower($row['role'] ?? $row['account_type'] ?? 'student');
+        $isSelf = ($curId > 0 && (int)$row['id'] === $curId);
+        $isCreator = ((int)$row['is_creator'] === 1);
+        $canModerate = ($isAdmin && !$isSelf && !$isCreator);
+
+        $avatarUrl = !empty($row['avatar']) ? $row['avatar'] : $defaultAvatar;
+        $members[] = [
+            'id' => (int)$row['id'],
+            'name' => $row['name'] ?: $row['username'],
+            'username' => $row['username'] ?: $row['name'],
+            'email' => $row['email'],
+            'avatar' => $avatarUrl,
+            'role' => $uRole,
+            'is_creator' => $isCreator,
+            'is_self' => $isSelf,
+            'can_moderate' => $canModerate,
+            'joined_at' => $row['joined_at'],
+            'joined_formatted' => $row['joined_at'] ? date('M j, Y', strtotime($row['joined_at'])) : 'Unknown'
+        ];
+    }
+
+    $banned = [];
+    if ($isAdmin) {
+        $bStmt = $conn->execute_query(
+            "SELECT gb.id AS ban_id, gb.created_at AS banned_at, u.id, u.name, u.username, u.email, u.avatar, u.role, u.account_type,
+                    ab.name AS banned_by_name
+             FROM group_bans gb
+             JOIN users u ON gb.user_id = u.id
+             LEFT JOIN users ab ON gb.banned_by = ab.id
+             WHERE gb.group_id = ?
+             ORDER BY gb.created_at DESC",
+            [$groupId]
+        );
+        while ($brow = $bStmt->fetch_assoc()) {
+            $avatarUrl = !empty($brow['avatar']) ? $brow['avatar'] : $defaultAvatar;
+            $banned[] = [
+                'id' => (int)$brow['id'],
+                'ban_id' => (int)$brow['ban_id'],
+                'name' => $brow['name'] ?: $brow['username'],
+                'username' => $brow['username'] ?: $brow['name'],
+                'email' => $brow['email'],
+                'avatar' => $avatarUrl,
+                'role' => strtolower($brow['role'] ?? 'student'),
+                'banned_at' => $brow['banned_at'],
+                'banned_formatted' => $brow['banned_at'] ? date('M j, Y', strtotime($brow['banned_at'])) : 'Recently',
+                'banned_by' => $brow['banned_by_name'] ?? 'Admin'
+            ];
+        }
+    }
+
+    echo json_encode([
+        'success' => true,
+        'group_id' => $groupId,
+        'group_name' => $grp['name'],
+        'member_count' => count($members),
+        'banned_count' => count($banned),
+        'is_admin' => $isAdmin,
+        'members' => $members,
+        'banned' => $banned
+    ]);
+    exit;
+}
+
+// 2. Admin: Remove Member from Group
+if ($action === 'remove_group_member') {
+    $isAjax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') || (isset($_POST['ajax']) && $_POST['ajax'] === '1');
+    if (!$currentUser || !is_admin()) {
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'Unauthorized. Admin access required.']);
+            exit;
+        }
+        header("Location: index.php?error=unauthorized");
+        exit;
+    }
+
+    $groupId = (int)($_REQUEST['group_id'] ?? 0);
+    $targetUserId = (int)($_REQUEST['user_id'] ?? 0);
+
+    if ($groupId <= 0 || $targetUserId <= 0) {
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'Invalid group or member ID.']);
+            exit;
+        }
+        header("Location: index.php?error=invalid_request");
+        exit;
+    }
+
+    $grp = $conn->execute_query("SELECT id, created_by, name FROM groups WHERE id = ?", [$groupId])->fetch_assoc();
+    if ($grp && (int)$grp['created_by'] === $targetUserId) {
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'Cannot remove the creator of this group.']);
+            exit;
+        }
+        header("Location: index.php?group=$groupId&error=cannot_remove_creator");
+        exit;
+    }
+
+    $conn->execute_query("DELETE FROM group_members WHERE group_id = ? AND user_id = ?", [$groupId, $targetUserId]);
+    $conn->execute_query("DELETE FROM group_requests WHERE group_id = ? AND user_id = ?", [$groupId, $targetUserId]);
+
+    $newCountRow = $conn->execute_query("SELECT COUNT(*) AS total FROM group_members WHERE group_id = ?", [$groupId])->fetch_assoc();
+    $newCount = (int)($newCountRow['total'] ?? 0);
+
+    if ($isAjax) {
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => true,
+            'message' => 'Member has been removed from the group.',
+            'group_id' => $groupId,
+            'member_count' => $newCount
+        ]);
+        exit;
+    }
+
+    $redirect = !empty($_REQUEST['redirect']) ? $_REQUEST['redirect'] : "index.php?group=$groupId&msg=member_removed";
+    header("Location: $redirect");
+    exit;
+}
+
+// 3. Admin: Ban Member from Group
+if ($action === 'ban_group_member') {
+    $isAjax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') || (isset($_POST['ajax']) && $_POST['ajax'] === '1');
+    if (!$currentUser || !is_admin()) {
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'Unauthorized. Admin access required.']);
+            exit;
+        }
+        header("Location: index.php?error=unauthorized");
+        exit;
+    }
+
+    $groupId = (int)($_REQUEST['group_id'] ?? 0);
+    $targetUserId = (int)($_REQUEST['user_id'] ?? 0);
+
+    if ($groupId <= 0 || $targetUserId <= 0) {
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'Invalid group or member ID.']);
+            exit;
+        }
+        header("Location: index.php?error=invalid_request");
+        exit;
+    }
+
+    if ($targetUserId === (int)$currentUser['id']) {
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'You cannot ban yourself.']);
+            exit;
+        }
+        header("Location: index.php?group=$groupId&error=cannot_ban_self");
+        exit;
+    }
+
+    $grp = $conn->execute_query("SELECT id, created_by, name FROM groups WHERE id = ?", [$groupId])->fetch_assoc();
+    if ($grp && (int)$grp['created_by'] === $targetUserId) {
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'Cannot ban the creator of this group.']);
+            exit;
+        }
+        header("Location: index.php?group=$groupId&error=cannot_ban_creator");
+        exit;
+    }
+
+    $conn->execute_query("DELETE FROM group_members WHERE group_id = ? AND user_id = ?", [$groupId, $targetUserId]);
+    $conn->execute_query("DELETE FROM group_requests WHERE group_id = ? AND user_id = ?", [$groupId, $targetUserId]);
+
+    $conn->execute_query(
+        "INSERT INTO group_bans (group_id, user_id, banned_by, created_at) VALUES (?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE created_at = NOW()",
+        [$groupId, $targetUserId, $currentUser['id']]
+    );
+
+    $newCountRow = $conn->execute_query("SELECT COUNT(*) AS total FROM group_members WHERE group_id = ?", [$groupId])->fetch_assoc();
+    $newCount = (int)($newCountRow['total'] ?? 0);
+    $banCountRow = $conn->execute_query("SELECT COUNT(*) AS total FROM group_bans WHERE group_id = ?", [$groupId])->fetch_assoc();
+    $banCount = (int)($banCountRow['total'] ?? 0);
+
+    if ($isAjax) {
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => true,
+            'message' => 'User has been banned from this group.',
+            'group_id' => $groupId,
+            'member_count' => $newCount,
+            'banned_count' => $banCount
+        ]);
+        exit;
+    }
+
+    $redirect = !empty($_REQUEST['redirect']) ? $_REQUEST['redirect'] : "index.php?group=$groupId&msg=member_banned";
+    header("Location: $redirect");
+    exit;
+}
+
+// 4. Admin: Unban User from Group
+if ($action === 'unban_group_member') {
+    $isAjax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') || (isset($_POST['ajax']) && $_POST['ajax'] === '1');
+    if (!$currentUser || !is_admin()) {
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'message' => 'Unauthorized. Admin access required.']);
+            exit;
+        }
+        header("Location: index.php?error=unauthorized");
+        exit;
+    }
+
+    $groupId = (int)($_REQUEST['group_id'] ?? 0);
+    $targetUserId = (int)($_REQUEST['user_id'] ?? 0);
+
+    if ($groupId > 0 && $targetUserId > 0) {
+        $conn->execute_query("DELETE FROM group_bans WHERE group_id = ? AND user_id = ?", [$groupId, $targetUserId]);
+    }
+
+    $banCountRow = $conn->execute_query("SELECT COUNT(*) AS total FROM group_bans WHERE group_id = ?", [$groupId])->fetch_assoc();
+    $banCount = (int)($banCountRow['total'] ?? 0);
+
+    if ($isAjax) {
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => true,
+            'message' => 'User has been unbanned from this group.',
+            'group_id' => $groupId,
+            'banned_count' => $banCount
+        ]);
+        exit;
+    }
+
+    $redirect = !empty($_REQUEST['redirect']) ? $_REQUEST['redirect'] : "index.php?group=$groupId&msg=member_unbanned";
+    header("Location: $redirect");
+    exit;
 }
 
 
@@ -2042,6 +2322,38 @@ HTML PART starts here
 
       </div>
 
+    <?php elseif ($msgType === 'member_removed'): ?>
+
+      <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); color: #6ee7b7; padding: 12px 16px; border-radius: 14px; margin-bottom: 16px; font-size: 13.5px; font-weight: 600;">
+
+        ✓ Member was removed from the group successfully.
+
+      </div>
+
+    <?php elseif ($msgType === 'member_banned'): ?>
+
+      <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #fca5a5; padding: 12px 16px; border-radius: 14px; margin-bottom: 16px; font-size: 13.5px; font-weight: 600;">
+
+        ✓ User has been banned from this group.
+
+      </div>
+
+    <?php elseif ($msgType === 'member_unbanned'): ?>
+
+      <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); color: #6ee7b7; padding: 12px 16px; border-radius: 14px; margin-bottom: 16px; font-size: 13.5px; font-weight: 600;">
+
+        ✓ User has been unbanned and may rejoin the group.
+
+      </div>
+
+    <?php elseif ($errType === 'banned_from_group'): ?>
+
+      <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #fca5a5; padding: 12px 16px; border-radius: 14px; margin-bottom: 16px; font-size: 13.5px; font-weight: 600;">
+
+        🚫 You are banned from this group by an administrator and cannot join or post discussions.
+
+      </div>
+
     <?php elseif ($errType === 'private_group'): ?>
 
       <div style="background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.35); color: #c084fc; padding: 12px 16px; border-radius: 14px; margin-bottom: 16px; font-size: 13.5px; font-weight: 600;">
@@ -2300,7 +2612,7 @@ HTML PART starts here
                       </div>
                       <p class="admin-group-desc"><?= e($ag['description'] ?: 'No description provided.') ?></p>
                       <div class="admin-group-meta">
-                        <span><strong><?= (int)$ag['member_count'] ?></strong> <?= (int)$ag['member_count'] === 1 ? 'Member' : 'Members' ?></span>
+                        <span style="cursor: pointer; text-decoration: underline; text-underline-offset: 2px;" onclick="openGroupMembersModal(<?= (int)$ag['id'] ?>, '<?= e(addslashes($ag['name'])) ?>')" title="View and moderate members"><strong><?= (int)$ag['member_count'] ?></strong> <?= (int)$ag['member_count'] === 1 ? 'Member' : 'Members' ?></span>
                         <span>·</span>
                         <span><strong><?= (int)$ag['post_count'] ?></strong> <?= (int)$ag['post_count'] === 1 ? 'Discussion' : 'Discussions' ?></span>
                         <span>·</span>
@@ -2543,7 +2855,7 @@ HTML PART starts here
 
                   <div class="group-card-meta">
 
-                    <span><strong><?= (int)$g['member_count'] ?></strong> <?= (int)$g['member_count'] === 1 ? 'Member' : 'Members' ?></span>
+                    <span style="cursor: pointer; text-decoration: underline; text-underline-offset: 2px;" onclick="event.preventDefault(); event.stopPropagation(); openGroupMembersModal(<?= (int)$g['id'] ?>, '<?= e(addslashes($g['name'])) ?>')" title="View members"><strong><?= (int)$g['member_count'] ?></strong> <?= (int)$g['member_count'] === 1 ? 'Member' : 'Members' ?></span>
 
                     <span>·</span>
 
@@ -2915,11 +3227,11 @@ HTML PART starts here
 
                 <div class="group-meta-stats" style="margin-top: 6px;">
 
-                  <span class="group-meta-item">
+                  <button type="button" class="group-meta-item group-meta-members-btn" onclick="openGroupMembersModal(<?= $selected_group_id ?>, '<?= e(addslashes($currentGroup['name'])) ?>')" title="<?= is_admin() ? 'Click to view & manage members (Remove / Ban)' : 'Click to view members' ?>" style="background: none; border: none; padding: 0; color: inherit; font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; text-decoration: none;">
 
-                    <span class="group-meta-num"><?= (int)$currentGroup['member_count'] ?></span> <?= (int)$currentGroup['member_count'] === 1 ? 'member' : 'members' ?>
+                    <span class="group-meta-num" id="group-header-member-count" style="text-decoration: underline; text-underline-offset: 3px;"><?= (int)$currentGroup['member_count'] ?></span> <?= (int)$currentGroup['member_count'] === 1 ? 'member' : 'members' ?>
 
-                  </span>
+                  </button>
 
                   <span>·</span>
 
@@ -2947,7 +3259,20 @@ HTML PART starts here
 
             <div class="group-actions-row">
 
-              <?php if ((int)$currentGroup['is_member'] > 0): ?>
+              <?php
+              $isCurrentUserBanned = false;
+              if ($currentUser && $selected_group_id > 0) {
+                  $banCheck = $conn->execute_query("SELECT id FROM group_bans WHERE group_id = ? AND user_id = ?", [$selected_group_id, $currentUser['id']])->fetch_assoc();
+                  $isCurrentUserBanned = (bool)$banCheck;
+              }
+              ?>
+              <?php if ($isCurrentUserBanned): ?>
+
+                <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 700; color: #ef4444; background: rgba(239, 68, 68, 0.12); padding: 6px 14px; border-radius: 9999px; border: 1px solid rgba(239, 68, 68, 0.3);">
+                  🚫 Banned from Group
+                </span>
+
+              <?php elseif ((int)$currentGroup['is_member'] > 0): ?>
 
                 <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 700; color: #34d399; background: rgba(16, 185, 129, 0.12); padding: 6px 14px; border-radius: 9999px;">
 
@@ -4771,6 +5096,71 @@ HTML PART starts here
 <?php endif; ?>
 
 
+
+<!-- GROUP MEMBERS MODAL (Admin: View, Remove & Ban Members) -->
+<div class="modal-overlay" id="group-members-modal" onclick="if(event.target===this) closeGroupMembersModal()">
+  <div class="modal-dialog group-members-dialog" style="max-width: 560px; width: 100%; max-height: 85vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; border-radius: 16px;">
+    <!-- Header -->
+    <div class="modal-header" style="flex-shrink: 0; padding: 18px 20px 12px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+      <div>
+        <h3 class="modal-title" id="group-members-modal-title" style="display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 800; margin: 0;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary-blue);">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          </svg>
+          <span id="group-members-header-text">Community Members</span>
+        </h3>
+        <p style="margin: 3px 0 0; font-size: 12.5px; color: var(--text-dim);" id="group-members-subtitle">
+          View members<?php if (is_admin()): ?> &middot; Admin Management (Remove / Ban)<?php endif; ?>
+        </p>
+      </div>
+      <button type="button" class="btn-close-modal" onclick="closeGroupMembersModal()" aria-label="Close" style="background: none; border: none; font-size: 18px; color: var(--text-dim); cursor: pointer; padding: 4px 8px; border-radius: 6px;">✕</button>
+    </div>
+
+    <!-- Tabs (Active Members vs Banned Users) -->
+    <div class="group-members-tabs" style="display: flex; gap: 8px; border-bottom: 1px solid var(--border-color); padding: 10px 20px; flex-shrink: 0; background: var(--bg-surface);">
+      <button type="button" id="tab-active-members" class="gm-tab-btn active" onclick="switchGroupMembersTab('active')">
+        Active Members (<span id="count-active-members">0</span>)
+      </button>
+      <?php if (is_admin()): ?>
+      <button type="button" id="tab-banned-members" class="gm-tab-btn" onclick="switchGroupMembersTab('banned')">
+        Banned (<span id="count-banned-members">0</span>)
+      </button>
+      <?php endif; ?>
+    </div>
+
+    <!-- Search Input -->
+    <div style="padding: 10px 20px; flex-shrink: 0; border-bottom: 1px solid var(--border-color);">
+      <div style="position: relative;">
+        <input type="text" id="group-members-search" placeholder="Search members by name or username..." oninput="filterGroupMembersList()" style="width: 100%; box-sizing: border-box; background: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 9999px; padding: 7px 14px 7px 34px; font-size: 13px; color: var(--text-main); outline: none;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-dim); pointer-events: none;">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Scrollable Members Container -->
+    <div id="group-members-body" style="padding: 12px 20px; overflow-y: auto; flex: 1; min-height: 220px; max-height: 380px;">
+      <div id="group-members-loading" style="text-align: center; padding: 40px 20px; color: var(--text-dim); font-size: 13.5px;">
+        <div style="display: inline-block; width: 22px; height: 22px; border: 2.5px solid rgba(29, 155, 240, 0.25); border-top-color: var(--primary-blue); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 8px;"></div>
+        <div>Loading members...</div>
+      </div>
+      <div id="group-active-members-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+      <div id="group-banned-members-list" style="display: none; flex-direction: column; gap: 8px;"></div>
+      <div id="group-members-empty" style="display: none; text-align: center; padding: 40px 20px; color: var(--text-dim); font-size: 13.5px;">
+        No members found.
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="modal-footer" style="flex-shrink: 0; padding: 12px 20px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; background: var(--bg-surface);">
+      <button type="button" class="btn-modal-cancel" onclick="closeGroupMembersModal()" style="padding: 7px 18px; border-radius: 9999px; font-size: 13px; font-weight: 700; cursor: pointer;">Close</button>
+    </div>
+  </div>
+</div>
 
 <!-- FULL IMAGE LIGHTBOX PREVIEW -->
 

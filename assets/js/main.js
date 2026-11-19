@@ -531,6 +531,7 @@ document.addEventListener('keydown', (e) => {
     closeCreateThreadModal();
     closeEditPostModal();
     closeLightbox();
+    closeGroupMembersModal();
   }
 });
 
@@ -1612,3 +1613,366 @@ document.addEventListener('keydown', (e) => {
 window.syncRichEditor = syncRichEditor;
 window.applyVisualFormat = applyVisualFormat;
 window.updateToolbarStates = updateToolbarStates;
+
+// ========================================================
+// GROUP MEMBERS MODAL (View, Remove & Ban Members)
+// ========================================================
+let currentMembersGroupId = 0;
+let groupMembersCache = { members: [], banned: [] };
+
+function openGroupMembersModal(groupId, groupName) {
+  currentMembersGroupId = parseInt(groupId, 10) || 0;
+  if (!currentMembersGroupId) return;
+
+  const modal = document.getElementById('group-members-modal');
+  if (!modal) return;
+
+  const headerText = document.getElementById('group-members-header-text');
+  if (headerText) {
+    headerText.textContent = (groupName ? groupName + ' – ' : '') + 'Community Members';
+  }
+
+  const searchInput = document.getElementById('group-members-search');
+  if (searchInput) searchInput.value = '';
+
+  switchGroupMembersTab('active');
+  modal.classList.add('active');
+
+  loadGroupMembersData(currentMembersGroupId);
+}
+
+function closeGroupMembersModal() {
+  const modal = document.getElementById('group-members-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+function switchGroupMembersTab(tab) {
+  const activeTabBtn = document.getElementById('tab-active-members');
+  const bannedTabBtn = document.getElementById('tab-banned-members');
+  const activeList = document.getElementById('group-active-members-list');
+  const bannedList = document.getElementById('group-banned-members-list');
+
+  if (tab === 'banned') {
+    if (activeTabBtn) activeTabBtn.classList.remove('active');
+    if (bannedTabBtn) bannedTabBtn.classList.add('active');
+    if (activeList) activeList.style.display = 'none';
+    if (bannedList) bannedList.style.display = 'flex';
+  } else {
+    if (activeTabBtn) activeTabBtn.classList.add('active');
+    if (bannedTabBtn) bannedTabBtn.classList.remove('active');
+    if (activeList) activeList.style.display = 'flex';
+    if (bannedList) bannedList.style.display = 'none';
+  }
+  filterGroupMembersList();
+}
+
+function loadGroupMembersData(groupId) {
+  const loadingEl = document.getElementById('group-members-loading');
+  const activeList = document.getElementById('group-active-members-list');
+  const bannedList = document.getElementById('group-banned-members-list');
+  const emptyEl = document.getElementById('group-members-empty');
+
+  if (loadingEl) loadingEl.style.display = 'block';
+  if (activeList) activeList.innerHTML = '';
+  if (bannedList) bannedList.innerHTML = '';
+  if (emptyEl) emptyEl.style.display = 'none';
+
+  fetch(`index.php?action=get_group_members&group_id=${groupId}`, {
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (loadingEl) loadingEl.style.display = 'none';
+      if (!data.success) {
+        if (emptyEl) {
+          emptyEl.textContent = data.message || 'Could not load group members.';
+          emptyEl.style.display = 'block';
+        }
+        return;
+      }
+
+      groupMembersCache.members = data.members || [];
+      groupMembersCache.banned = data.banned || [];
+
+      // Update badge counts
+      const countActive = document.getElementById('count-active-members');
+      if (countActive) countActive.textContent = groupMembersCache.members.length;
+      const countBanned = document.getElementById('count-banned-members');
+      if (countBanned) countBanned.textContent = groupMembersCache.banned.length;
+
+      // Render Active Members
+      renderActiveMembers(groupMembersCache.members, data.is_admin, groupId);
+
+      // Render Banned Members
+      renderBannedMembers(groupMembersCache.banned, data.is_admin, groupId);
+
+      filterGroupMembersList();
+    })
+    .catch(() => {
+      if (loadingEl) loadingEl.style.display = 'none';
+      if (emptyEl) {
+        emptyEl.textContent = 'Failed to load group members. Please try again.';
+        emptyEl.style.display = 'block';
+      }
+    });
+}
+
+function escapeHtml(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function renderActiveMembers(members, isAdmin, groupId) {
+  const container = document.getElementById('group-active-members-list');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (!members || members.length === 0) {
+    return;
+  }
+
+  members.forEach(m => {
+    const item = document.createElement('div');
+    item.className = 'group-member-item';
+    item.setAttribute('data-name', (m.name || '').toLowerCase());
+    item.setAttribute('data-username', (m.username || '').toLowerCase());
+
+    const roleBadge = m.is_creator
+      ? `<span class="gm-badge gm-badge-creator">Creator</span>`
+      : m.role === 'admin'
+      ? `<span class="gm-badge gm-badge-admin">Admin</span>`
+      : m.role === 'faculty'
+      ? `<span class="gm-badge gm-badge-faculty">Faculty</span>`
+      : `<span class="gm-badge gm-badge-student">Student</span>`;
+
+    let actionsHtml = '';
+    if (isAdmin && m.can_moderate) {
+      actionsHtml = `
+        <div class="group-member-actions" style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+          <button type="button" class="btn-gm-remove" onclick="confirmRemoveMember(${groupId}, ${m.id}, '${escapeHtml(m.name)}')" title="Remove member from this group">
+            Remove
+          </button>
+          <button type="button" class="btn-gm-ban" onclick="confirmBanMember(${groupId}, ${m.id}, '${escapeHtml(m.name)}')" title="Ban user from this group">
+            Ban
+          </button>
+        </div>
+      `;
+    } else if (m.is_self) {
+      actionsHtml = `<span style="font-size: 11.5px; color: var(--text-dim); padding: 4px 8px; border-radius: 9999px; background: rgba(255,255,255,0.05);">You</span>`;
+    }
+
+    item.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;">
+        <a href="profile.php?id=${m.id}" style="flex-shrink: 0;">
+          <img src="${escapeHtml(m.avatar)}" alt="${escapeHtml(m.name)}" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border-color); display: block;" onerror="this.src='assets/images/default-avatar.svg'">
+        </a>
+        <div style="min-width: 0; flex: 1;">
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <a href="profile.php?id=${m.id}" style="font-weight: 700; font-size: 13.5px; color: var(--text-main); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              ${escapeHtml(m.name)}
+            </a>
+            ${roleBadge}
+          </div>
+          <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px;">
+            ${m.username ? '@' + escapeHtml(m.username) + ' · ' : ''}Joined ${escapeHtml(m.joined_formatted)}
+          </div>
+        </div>
+      </div>
+      ${actionsHtml}
+    `;
+    container.appendChild(item);
+  });
+}
+
+function renderBannedMembers(banned, isAdmin, groupId) {
+  const container = document.getElementById('group-banned-members-list');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (!banned || banned.length === 0) {
+    return;
+  }
+
+  banned.forEach(b => {
+    const item = document.createElement('div');
+    item.className = 'group-member-item';
+    item.setAttribute('data-name', (b.name || '').toLowerCase());
+    item.setAttribute('data-username', (b.username || '').toLowerCase());
+
+    item.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;">
+        <a href="profile.php?id=${b.id}" style="flex-shrink: 0;">
+          <img src="${escapeHtml(b.avatar)}" alt="${escapeHtml(b.name)}" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(239, 68, 68, 0.35); display: block;" onerror="this.src='assets/images/default-avatar.svg'">
+        </a>
+        <div style="min-width: 0; flex: 1;">
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <a href="profile.php?id=${b.id}" style="font-weight: 700; font-size: 13.5px; color: var(--text-main); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              ${escapeHtml(b.name)}
+            </a>
+            <span class="gm-badge gm-badge-banned">Banned</span>
+          </div>
+          <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px;">
+            Banned ${escapeHtml(b.banned_formatted)} by ${escapeHtml(b.banned_by)}
+          </div>
+        </div>
+      </div>
+      ${isAdmin ? `
+        <div class="group-member-actions" style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+          <button type="button" class="btn-gm-unban" onclick="confirmUnbanMember(${groupId}, ${b.id}, '${escapeHtml(b.name)}')" title="Unban user from this group">
+            Unban
+          </button>
+        </div>
+      ` : ''}
+    `;
+    container.appendChild(item);
+  });
+}
+
+function filterGroupMembersList() {
+  const searchInput = document.getElementById('group-members-search');
+  const query = (searchInput ? searchInput.value : '').toLowerCase().trim();
+  const activeTabBtn = document.getElementById('tab-active-members');
+  const isBannedTab = !activeTabBtn || !activeTabBtn.classList.contains('active');
+  const container = isBannedTab
+    ? document.getElementById('group-banned-members-list')
+    : document.getElementById('group-active-members-list');
+  const emptyEl = document.getElementById('group-members-empty');
+
+  if (!container) return;
+
+  const items = container.querySelectorAll('.group-member-item');
+  let visibleCount = 0;
+
+  items.forEach(item => {
+    const name = item.getAttribute('data-name') || '';
+    const username = item.getAttribute('data-username') || '';
+    if (!query || name.includes(query) || username.includes(query)) {
+      item.style.display = 'flex';
+      visibleCount++;
+    } else {
+      item.style.display = 'none';
+    }
+  });
+
+  if (emptyEl) {
+    if (visibleCount === 0) {
+      emptyEl.textContent = query
+        ? `No members found matching "${query}".`
+        : (isBannedTab ? 'No banned users in this group.' : 'No members found in this group.');
+      emptyEl.style.display = 'block';
+    } else {
+      emptyEl.style.display = 'none';
+    }
+  }
+}
+
+function confirmRemoveMember(groupId, userId, userName) {
+  if (!confirm(`Are you sure you want to remove "${userName}" from this community?\n\nThey will be removed from the members list.`)) {
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('action', 'remove_group_member');
+  formData.append('group_id', groupId);
+  formData.append('user_id', userId);
+  formData.append('ajax', '1');
+
+  fetch('index.php', {
+    method: 'POST',
+    body: formData,
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        if (typeof showToast === 'function') {
+          showToast(data.message || 'Member removed successfully.');
+        }
+        const headerCount = document.getElementById('group-header-member-count');
+        if (headerCount && data.member_count !== undefined) {
+          headerCount.textContent = data.member_count;
+        }
+        loadGroupMembersData(groupId);
+      } else {
+        alert(data.message || 'Failed to remove member.');
+      }
+    })
+    .catch(() => alert('Network error while removing member.'));
+}
+
+function confirmBanMember(groupId, userId, userName) {
+  if (!confirm(`Are you sure you want to BAN "${userName}" from this community?\n\nThey will be removed immediately and blocked from rejoining or posting in this group.`)) {
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('action', 'ban_group_member');
+  formData.append('group_id', groupId);
+  formData.append('user_id', userId);
+  formData.append('ajax', '1');
+
+  fetch('index.php', {
+    method: 'POST',
+    body: formData,
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        if (typeof showToast === 'function') {
+          showToast(data.message || 'User has been banned from this group.');
+        }
+        const headerCount = document.getElementById('group-header-member-count');
+        if (headerCount && data.member_count !== undefined) {
+          headerCount.textContent = data.member_count;
+        }
+        loadGroupMembersData(groupId);
+      } else {
+        alert(data.message || 'Failed to ban member.');
+      }
+    })
+    .catch(() => alert('Network error while banning member.'));
+}
+
+function confirmUnbanMember(groupId, userId, userName) {
+  if (!confirm(`Unban "${userName}" from this community?\n\nThey will be able to rejoin the group.`)) {
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('action', 'unban_group_member');
+  formData.append('group_id', groupId);
+  formData.append('user_id', userId);
+  formData.append('ajax', '1');
+
+  fetch('index.php', {
+    method: 'POST',
+    body: formData,
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        if (typeof showToast === 'function') {
+          showToast(data.message || 'User unbanned successfully.');
+        }
+        loadGroupMembersData(groupId);
+      } else {
+        alert(data.message || 'Failed to unban user.');
+      }
+    })
+    .catch(() => alert('Network error while unbanning user.'));
+}
+
+window.openGroupMembersModal = openGroupMembersModal;
+window.closeGroupMembersModal = closeGroupMembersModal;
+window.switchGroupMembersTab = switchGroupMembersTab;
+window.filterGroupMembersList = filterGroupMembersList;
+window.confirmRemoveMember = confirmRemoveMember;
+window.confirmBanMember = confirmBanMember;
+window.confirmUnbanMember = confirmUnbanMember;
