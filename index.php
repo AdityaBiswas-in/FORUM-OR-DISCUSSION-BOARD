@@ -1175,6 +1175,8 @@ if ($current_view !== 'admin' && $current_view !== 'groups') {
 
     if ($single_post_id > 0) {
 
+        $conn->execute_query("UPDATE posts SET views = views + 1 WHERE id = ?", [$single_post_id]);
+
         $sql .= " WHERE p.id = ?";
 
         $params[] = $single_post_id;
@@ -2937,6 +2939,15 @@ HTML PART starts here
                     </svg>
                     <span id="reply-count-badge-<?= $postId ?>"><?= count($replies) > 0 ? count($replies) . (count($replies) === 1 ? ' reply' : ' replies') : 'Reply' ?></span>
                   </button>
+
+                  <!-- View Count -->
+                  <span class="post-action-btn action-views" title="Views" style="cursor: default;">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                    <span><?= (int)($post['views'] ?? 0) === 1 ? '1 view' : number_format((int)($post['views'] ?? 0)) . ' views' ?></span>
+                  </span>
 
                 </div>
 
