@@ -30,7 +30,7 @@ if (!function_exists('format_post_content')) {
 
         // If string contains HTML tags from visual rich editor
         if (preg_match('/<[a-z][\s\S]*>/i', $str)) {
-            $allowedTags = '<b><strong><i><em><s><del><strike><u><h3><h4><p><br><div><span><blockquote><ul><ol><li>';
+            $allowedTags = '<b><strong><i><em><s><del><strike><u><h3><h4><h5><p><br><div><span><blockquote><ul><ol><li><a>';
             $safe = strip_tags($str, $allowedTags);
             // Strip any malicious script/event attributes
             $safe = preg_replace('/\s+on\w+\s*=\s*(["\']).*?\1/i', '', $safe);
@@ -45,7 +45,102 @@ if (!function_exists('format_post_content')) {
         $safe = preg_replace('/\*\*(.+?)\*\*/s', '<strong>$1</strong>', $safe);
         $safe = preg_replace('/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/s', '<em>$1</em>', $safe);
         $safe = preg_replace('/~~(.+?)~~/s', '<del>$1</del>', $safe);
+        $safe = preg_replace('/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/', '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: var(--primary-blue); text-decoration: underline;">$1</a>', $safe);
+
+        // Bullet list lines starting with • or - or *
+        $lines = explode("\n", $safe);
+        $inList = false;
+        $processed = [];
+        foreach ($lines as $line) {
+            $trimmed = trim($line);
+            if (preg_match('/^[•\-\*]\s+(.+)$/u', $trimmed, $m)) {
+                if (!$inList) {
+                    $processed[] = '<ul style="padding-left: 22px; margin: 6px 0 10px 0; list-style-type: disc;">';
+                    $inList = true;
+                }
+                $processed[] = '<li style="margin-bottom: 3px;">' . $m[1] . '</li>';
+            } else {
+                if ($inList) {
+                    $processed[] = '</ul>';
+                    $inList = false;
+                }
+                $processed[] = $line;
+            }
+        }
+        if ($inList) {
+            $processed[] = '</ul>';
+        }
+        $safe = implode("\n", $processed);
         return nl2br($safe);
+    }
+}
+
+// Helper: Format official group announcements into structured classic forum layouts (Headings, Bullet points, Links)
+if (!function_exists('format_announcement_content')) {
+    function format_announcement_content(?string $str = ''): string {
+        if ($str === null || $str === '') return '';
+
+        // If string already contains HTML tags from visual rich editor
+        if (preg_match('/<[a-z][\s\S]*>/i', $str)) {
+            $allowedTags = '<b><strong><i><em><s><del><strike><u><h3><h4><h5><p><br><div><span><blockquote><ul><ol><li><a>';
+            $safe = strip_tags($str, $allowedTags);
+            $safe = preg_replace('/\s+on\w+\s*=\s*(["\']).*?\1/i', '', $safe);
+            $safe = preg_replace('/javascript:/i', '', $safe);
+            return $safe;
+        }
+
+        // Markdown fallback
+        $safe = htmlspecialchars($str, ENT_QUOTES, 'UTF-8');
+
+        // Section Headings (e.g. ### What you need to do)
+        $safe = preg_replace('/^(#{1,3})\s+(.+)$/m', '<h3 class="announcement-section-heading" style="font-size: 16.5px; font-weight: 700; color: #ffffff; margin: 22px 0 10px 0; padding-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.08); display: block;">$2</h3>', $safe);
+
+        // Bold: **text**
+        $safe = preg_replace('/\*\*(.+?)\*\*/s', '<strong style="color: #f1f5f9; font-weight: 700;">$1</strong>', $safe);
+
+        // Italic: *text*
+        $safe = preg_replace('/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/s', '<em>$1</em>', $safe);
+
+        // Markdown link [title](url)
+        $safe = preg_replace('/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/', '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: #38bdf8; text-decoration: underline;">$1</a>', $safe);
+
+        // Auto-link bare URLs
+        $safe = preg_replace('/(?<!href=")(https?:\/\/[^\s<]+)/', '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #38bdf8; text-decoration: underline;">$1</a>', $safe);
+
+        // Parse bullet points lines starting with • or - or * into <ul><li>
+        $lines = explode("\n", $safe);
+        $inList = false;
+        $processed = [];
+
+        foreach ($lines as $line) {
+            $trimmed = trim($line);
+            if (preg_match('/^[•\-\*]\s+(.+)$/u', $trimmed, $m)) {
+                if (!$inList) {
+                    $processed[] = '<ul class="announcement-bullet-list" style="margin: 10px 0 14px 22px; padding-left: 4px; line-height: 1.75; color: #e2e8f0; list-style-type: disc;">';
+                    $inList = true;
+                }
+                $processed[] = '<li style="margin-bottom: 6px;">' . $m[1] . '</li>';
+            } else {
+                if ($inList) {
+                    $processed[] = '</ul>';
+                    $inList = false;
+                }
+                $processed[] = $line;
+            }
+        }
+        if ($inList) {
+            $processed[] = '</ul>';
+        }
+
+        $html = nl2br(implode("\n", $processed));
+        $html = preg_replace('/(<(?:ul|ol)[^>]*>)\s*<br\s*\/?>/i', '$1', $html);
+        $html = preg_replace('/<br\s*\/?>\s*(<\/(?:ul|ol)>)/i', '$1', $html);
+        $html = preg_replace('/(<li[^>]*>)\s*<br\s*\/?>/i', '$1', $html);
+        $html = preg_replace('/<br\s*\/?>\s*(<\/li>)/i', '$1', $html);
+        $html = preg_replace('/<\/li>\s*<br\s*\/?>/i', '</li>', $html);
+        $html = preg_replace('/(<\/h[1-6]>)\s*<br\s*\/?>/i', '$1', $html);
+
+        return $html;
     }
 }
 
@@ -168,3 +263,17 @@ if (!function_exists('render_group_status_badge')) {
         }
     }
 }
+
+// Ensure group_notices table exists for admin important announcements
+$conn->query("
+    CREATE TABLE IF NOT EXISTS `group_notices` (
+      `id` INT AUTO_INCREMENT PRIMARY KEY,
+      `group_id` INT NOT NULL,
+      `user_id` INT NOT NULL,
+      `headline` VARCHAR(255) NOT NULL,
+      `message` LONGTEXT NOT NULL,
+      `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX `idx_group_notices_group` (`group_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+");
+

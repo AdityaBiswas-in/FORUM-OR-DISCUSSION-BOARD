@@ -51,7 +51,7 @@ function upload_single_image(?array $file): ?string {
     return null;
 }
 
-// Render Rich Text / Markdown Formatting Toolbar (Bold, Italic, Strikethrough, Superscript, Heading)
+// Render Rich Text / Markdown Formatting Toolbar (Bold, Italic, Strikethrough, Heading, Bullet List, Link)
 function render_format_toolbar(string $targetId = '', string $extraClass = ''): void {
 ?>
   <div class="format-toolbar <?= $extraClass ?>" <?= !empty($targetId) ? 'data-target="' . e($targetId) . '"' : '' ?> role="toolbar" aria-label="Text formatting">
@@ -61,11 +61,20 @@ function render_format_toolbar(string $targetId = '', string $extraClass = ''): 
     <button type="button" class="format-btn" data-format="italic" title="Italic (Ctrl+I)">
       <span class="fmt-i">i</span>
     </button>
+    <button type="button" class="format-btn" data-format="underline" title="Underline (Ctrl+U)">
+      <span class="fmt-u">U</span>
+    </button>
     <button type="button" class="format-btn" data-format="strike" title="Strikethrough">
       <span class="fmt-s">S</span>
     </button>
     <button type="button" class="format-btn" data-format="heading" title="Heading">
       <span class="fmt-heading">ᴛT</span>
+    </button>
+    <button type="button" class="format-btn" data-format="bullet" title="Bullet List">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+    </button>
+    <button type="button" class="format-btn" data-format="link" title="Insert Link">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
     </button>
     <span class="format-divider" aria-hidden="true"></span>
   </div>
@@ -606,6 +615,48 @@ if ($action === 'delete_group') {
 
 
 
+// Admin: Create Important Notice / Announcement in a Group
+if ($action === 'create_group_notice') {
+    if (!$currentUser || !is_admin()) {
+        header("Location: index.php?error=unauthorized");
+        exit;
+    }
+    $groupId  = (int)($_POST['group_id'] ?? 0);
+    $headline = trim($_POST['headline'] ?? '');
+    $message  = trim($_POST['message'] ?? '');
+
+    if ($groupId > 0 && $headline !== '' && $message !== '') {
+        $conn->execute_query("
+            INSERT INTO group_notices (group_id, user_id, headline, message, created_at)
+            VALUES (?, ?, ?, ?, NOW())
+        ", [$groupId, (int)$currentUser['id'], $headline, $message]);
+        $redirect = !empty($_POST['redirect']) ? $_POST['redirect'] : "index.php?group=$groupId&msg=notice_created";
+        header("Location: $redirect");
+        exit;
+    }
+    header("Location: index.php?group=$groupId&error=empty_fields");
+    exit;
+}
+
+// Admin: Delete Group Notice
+if ($action === 'delete_group_notice') {
+    if (!$currentUser || !is_admin()) {
+        header("Location: index.php?error=unauthorized");
+        exit;
+    }
+    $noticeId = (int)($_REQUEST['notice_id'] ?? 0);
+    $groupId  = (int)($_REQUEST['group_id'] ?? 0);
+
+    if ($noticeId > 0) {
+        $conn->execute_query("DELETE FROM group_notices WHERE id = ?", [$noticeId]);
+    }
+    $redirect = !empty($_REQUEST['redirect']) ? $_REQUEST['redirect'] : (($groupId > 0) ? "index.php?group=$groupId&msg=notice_deleted" : "index.php");
+    header("Location: $redirect");
+    exit;
+}
+
+
+
 // Create Post (Group membership required, group must be active)
 if ($action === 'create_post') {
     $isAjax  = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest');
@@ -1038,6 +1089,33 @@ $search_query      = trim($_GET['q'] ?? '');
 
 $single_post_id    = (int)($_GET['post'] ?? $_GET['id'] ?? 0);
 
+$single_notice_id  = (int)($_GET['notice'] ?? 0);
+
+$currentNotice = null;
+if ($single_notice_id > 0) {
+    $currentNotice = $conn->execute_query("
+        SELECT gn.*, g.name as group_name, g.status as group_status, g.image_url as group_image,
+               u.name as author_name, u.avatar as author_avatar, u.username as author_username, u.role as author_role,
+               u.bio as author_bio, u.created_at as author_joined,
+               (SELECT COUNT(*) FROM posts WHERE user_id = u.id) as author_posts_count
+        FROM group_notices gn
+        JOIN groups g ON gn.group_id = g.id
+        JOIN users u ON gn.user_id = u.id
+        WHERE gn.id = ?
+    ", [$single_notice_id])->fetch_assoc();
+
+    if ($currentNotice) {
+        $selected_group_id = (int)$currentNotice['group_id'];
+        if ($currentNotice['group_status'] === 'private') {
+            $canViewNotice = (is_admin() || ($currentUser && is_group_member((int)$currentUser['id'], (int)$currentNotice['group_id'], $conn)));
+            if (!$canViewNotice) {
+                header("Location: index.php?group=" . (int)$currentNotice['group_id'] . "&error=private_group");
+                exit;
+            }
+        }
+    }
+}
+
 
 
 // Get current user's joined active groups for post composer dropdown
@@ -1080,6 +1158,7 @@ $isGroupMember = false;
 $canViewPrivateGroup = true;
 $hasPendingRequest = false;
 $groupPendingRequests = [];
+$groupNotices = [];
 
 if ($selected_group_id > 0) {
 
@@ -1113,6 +1192,23 @@ if ($selected_group_id > 0) {
                 WHERE gr.group_id = ?
                 ORDER BY gr.created_at ASC
             ", [$selected_group_id])->fetch_all(MYSQLI_ASSOC);
+        }
+
+        if ($canViewPrivateGroup) {
+            $gnSql = "
+                SELECT gn.*, u.name as author_name, u.avatar as author_avatar, u.role as author_role
+                FROM group_notices gn
+                JOIN users u ON gn.user_id = u.id
+                WHERE gn.group_id = ?
+            ";
+            $gnParams = [$selected_group_id];
+            if ($current_view === 'announcements' && !empty($search_query)) {
+                $gnSql .= " AND (gn.headline LIKE ? OR gn.message LIKE ?)";
+                $gnParams[] = "%$search_query%";
+                $gnParams[] = "%$search_query%";
+            }
+            $gnSql .= " ORDER BY gn.created_at DESC";
+            $groupNotices = $conn->execute_query($gnSql, $gnParams)->fetch_all(MYSQLI_ASSOC);
         }
     }
 
@@ -1246,7 +1342,7 @@ $repliesByPost  = [];
 
 
 
-if ($current_view !== 'admin' && $current_view !== 'groups') {
+if ($current_view !== 'admin' && $current_view !== 'groups' && $current_view !== 'announcements') {
 
     $sql = "
 
@@ -1451,7 +1547,7 @@ HTML PART starts here
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>Quaddit - College Discussion Board</title>
+  <title><?= !empty($currentNotice) ? e($currentNotice['headline']) . ' · Announcements · Quaddit' : ($current_view === 'announcements' && !empty($currentGroup) ? 'All Announcements · ' . e($currentGroup['name']) . ' · Quaddit' : 'Quaddit - College Discussion Board') ?></title>
 
   <meta name="description" content="Quaddit is the modern discussion board for college students to share questions, images, setups, and campus moments.">
 
@@ -1479,16 +1575,15 @@ HTML PART starts here
 
 <?php require_once __DIR__ . '/includes/mobile-nav.php'; ?>
 
-<div class="app-container<?= $current_view === 'admin' ? ' app-admin-mode' : '' ?>">
-
-
+<?php
+  $isAnnouncementSection = (!empty($currentNotice) || ($selected_group_id > 0 && $current_view === 'announcements'));
+?>
+<div class="app-container<?= $current_view === 'admin' ? ' app-admin-mode' : '' ?><?= $isAnnouncementSection ? ' app-no-left-sidebar' : '' ?>">
 
   <!-- ======================================================== -->
-
   <!-- LEFT SIDEBAR                                             -->
-
   <!-- ======================================================== -->
-
+  <?php if (!$isAnnouncementSection): ?>
   <aside class="sidebar-left">
 
     <div>
@@ -1760,6 +1855,7 @@ HTML PART starts here
     <?php endif; ?>
 
   </aside>
+  <?php endif; ?>
 
 
 
@@ -1784,6 +1880,9 @@ HTML PART starts here
         <?php if (!empty($selected_group_id)): ?>
 
           <input type="hidden" name="group" value="<?= $selected_group_id ?>">
+          <?php if ($current_view === 'announcements'): ?>
+            <input type="hidden" name="view" value="announcements">
+          <?php endif; ?>
 
         <?php elseif (!empty($current_view)): ?>
 
@@ -1799,7 +1898,7 @@ HTML PART starts here
 
         </svg>
 
-        <input type="text" name="q" placeholder="<?= $current_view === 'groups' ? 'Search groups...' : 'Search discussions...' ?>" value="<?= e($search_query) ?>" autocomplete="off">
+        <input type="text" name="q" placeholder="<?= $current_view === 'groups' ? 'Search groups...' : ($current_view === 'announcements' ? 'Search announcements...' : 'Search discussions...') ?>" value="<?= e($search_query) ?>" autocomplete="off">
 
       </form>
 
@@ -1862,6 +1961,22 @@ HTML PART starts here
       <div style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #38bdf8; padding: 12px 16px; border-radius: 14px; margin-bottom: 16px; font-size: 13.5px; font-weight: 600;">
 
         ✓ Group status updated successfully.
+
+      </div>
+
+    <?php elseif ($msgType === 'notice_created'): ?>
+
+      <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); color: #6ee7b7; padding: 12px 16px; border-radius: 14px; margin-bottom: 16px; font-size: 13.5px; font-weight: 600;">
+
+        ✓ Important notice published successfully.
+
+      </div>
+
+    <?php elseif ($msgType === 'notice_deleted'): ?>
+
+      <div style="background: rgba(244, 33, 46, 0.15); border: 1px solid rgba(244, 33, 46, 0.35); color: #fca5a5; padding: 12px 16px; border-radius: 14px; margin-bottom: 16px; font-size: 13.5px; font-weight: 600;">
+
+        Important notice was deleted.
 
       </div>
 
@@ -2497,7 +2612,206 @@ HTML PART starts here
 
 
 
-      <?php if ($single_post_id > 0): ?>
+      <?php if ($single_notice_id > 0 && !empty($currentNotice)): ?>
+
+        <!-- A SIMPLE BACK OPTION & BREADCRUMB -->
+        <div style="margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <a href="index.php?group=<?= (int)$currentNotice['group_id'] ?>" style="display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 700; color: #38bdf8; text-decoration: none; padding: 6px 14px; border-radius: 9999px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); transition: all 0.15s ease;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+              </svg>
+              <span>Back to <?= e($currentNotice['group_name']) ?></span>
+            </a>
+            <a href="index.php?group=<?= (int)$currentNotice['group_id'] ?>&view=announcements" style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #94a3b8; text-decoration: none; padding: 6px 12px; border-radius: 9999px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); transition: all 0.15s ease;">
+              <span>All Announcements</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- DEDICATED CLASSIC FORUM ANNOUNCEMENT CARD -->
+        <div class="forum-announcement-card" style="background: #14171a; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; overflow: hidden; margin-bottom: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.35);">
+
+          <!-- Top Announcement Header (Title & Subtitle bar) -->
+          <div style="background: rgba(255, 255, 255, 0.03); padding: 18px 22px 14px 22px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;">
+            <div style="min-width: 0;">
+              <h1 style="font-size: 20px; font-weight: 700; color: #38bdf8; line-height: 1.35; margin: 0 0 6px 0; word-break: break-word;">
+                <?= e($currentNotice['headline']) ?>
+              </h1>
+              <div style="font-size: 12.5px; color: #94a3b8; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                <span>by <strong style="color: #e2e8f0; font-weight: 700;"><?= e($currentNotice['author_name']) ?></strong></span>
+                <span>&raquo;</span>
+                <span><?= date('D M d, Y g:i a', strtotime($currentNotice['created_at'])) ?></span>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+              <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); padding: 3px 9px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                <span>Announcement</span>
+              </span>
+              <?php if (is_admin()): ?>
+                <a href="index.php?action=delete_group_notice&notice_id=<?= (int)$currentNotice['id'] ?>&group_id=<?= (int)$currentNotice['group_id'] ?>" onclick="return confirm('Delete this announcement?')" style="font-size: 11.5px; color: #f87171; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); padding: 4px 10px; border-radius: 6px; text-decoration: none; font-weight: 700;">
+                  Delete
+                </a>
+              <?php endif; ?>
+            </div>
+          </div>
+
+          <!-- Two-column Post Layout (Left: Message Content | Right: Author Profile Sidebar) -->
+          <div class="forum-announcement-columns" style="display: flex; flex-direction: row; align-items: stretch; min-height: 280px;">
+            <!-- Left Column: Rich Message Body -->
+            <div style="flex: 1; padding: 22px 26px; min-width: 0; color: #e2e8f0; font-size: 14.5px; line-height: 1.75;">
+              <div class="announcement-parsed-body" style="word-break: break-word;">
+                <?= format_announcement_content($currentNotice['message']) ?>
+              </div>
+            </div>
+
+            <!-- Right Column: Author Sidebar (Classic Forum Style) -->
+            <div class="forum-author-sidebar" style="width: 220px; flex-shrink: 0; background: rgba(0, 0, 0, 0.22); border-left: 1px solid rgba(255, 255, 255, 0.08); padding: 22px 18px; display: flex; flex-direction: column; align-items: center; text-align: center;">
+              <img src="<?= e($currentNotice['author_avatar'] ?: 'assets/images/default-avatar.png') ?>" alt="<?= e($currentNotice['author_name']) ?>" style="width: 80px; height: 80px; border-radius: 14px; object-fit: cover; border: 2px solid rgba(56, 189, 248, 0.35); box-shadow: 0 4px 14px rgba(0,0,0,0.4); margin-bottom: 10px; display: block;">
+              
+              <div style="font-size: 15px; font-weight: 800; color: #38bdf8; margin-bottom: 2px; line-height: 1.2;">
+                <?= e($currentNotice['author_name']) ?>
+              </div>
+              
+              <div style="font-size: 11.5px; color: #94a3b8; margin-bottom: 8px;">
+                <?= !empty($currentNotice['author_bio']) && $currentNotice['author_bio'] !== 'Quaddit campus member' ? e($currentNotice['author_bio']) : 'Infrastructure Team Leader' ?>
+              </div>
+
+              <div style="margin-bottom: 12px; width: 100%;">
+                <span style="display: block; font-size: 10px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; padding: 3px 8px; border-radius: 4px; box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3);">
+                  INFRASTRUCTURE TEAM
+                </span>
+              </div>
+
+              <div style="width: 100%; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 10px; font-size: 11.5px; color: #94a3b8; text-align: left; line-height: 1.85;">
+                <div><strong style="color: #cbd5e1;">Posts:</strong> <?= (int)($currentNotice['author_posts_count'] ?? 1) ?></div>
+                <div><strong style="color: #cbd5e1;">Joined:</strong> <?= !empty($currentNotice['author_joined']) ? date('M d, Y', strtotime($currentNotice['author_joined'])) : 'Oct 2026' ?></div>
+                <div><strong style="color: #cbd5e1;">Role:</strong> <?= e(ucfirst($currentNotice['author_role'] ?? 'Admin')) ?></div>
+                <div><strong style="color: #cbd5e1;">Status:</strong> <span style="color: #10b981; font-weight: 700;">● Official</span></div>
+                <div style="display: flex; align-items: center; gap: 4px; margin-top: 2px;">
+                  <strong style="color: #cbd5e1;">Contact:</strong>
+                  <span title="Contact Admin" style="cursor: pointer; color: #38bdf8;">💬</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom subtle read-only notice indicator -->
+          <div style="background: rgba(0,0,0,0.18); border-top: 1px solid rgba(255,255,255,0.08); padding: 10px 22px; font-size: 12px; color: #64748b; display: flex; align-items: center; gap: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            <span>This is an official group announcement. Published strictly for reading only (comments, replies, and reactions disabled).</span>
+          </div>
+        </div>
+
+      <?php elseif ($selected_group_id > 0 && $current_view === 'announcements' && !empty($currentGroup)): ?>
+
+        <!-- DEDICATED ALL ANNOUNCEMENTS VIEW (phpBB Classic Style Feed) -->
+        <div class="all-announcements-view" style="margin-bottom: 24px;">
+
+          <!-- Top Back & Action Bar -->
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+            <a href="index.php?group=<?= $selected_group_id ?>" style="display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 700; color: #38bdf8; text-decoration: none; padding: 6px 14px; border-radius: 9999px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); transition: all 0.15s ease;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+              </svg>
+              <span>Back to <?= e($currentGroup['name']) ?></span>
+            </a>
+
+            <?php if (is_admin()): ?>
+              <button type="button" onclick="openAddNoticeModal(<?= $selected_group_id ?>, 'index.php?group=<?= $selected_group_id ?>&view=announcements')" style="display: inline-flex; align-items: center; gap: 6px; background: var(--primary-blue); color: #ffffff; border: none; border-radius: 9999px; padding: 7px 16px; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.15s ease; box-shadow: 0 2px 8px rgba(29, 155, 240, 0.3);">
+                <span style="font-size: 14px; line-height: 1; font-weight: 800;">+</span>
+                <span>New Announcement</span>
+              </button>
+            <?php endif; ?>
+          </div>
+
+          <!-- phpBB Classic Style Announcements Container -->
+          <div style="background: #14171a; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 22px 24px; box-shadow: 0 4px 18px rgba(0,0,0,0.25);">
+
+            <!-- Reddish Section Heading (matching phpBB reference) -->
+            <div style="font-size: 16.5px; font-weight: 700; color: #f43f5e; margin-bottom: 24px; letter-spacing: -0.01em; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+              <span>Latest <?= e($currentGroup['name']) ?> Announcements</span>
+              <?php if (!empty($groupNotices)): ?>
+                <span style="font-size: 12px; font-weight: 600; color: #94a3b8;"><?= count($groupNotices) ?> <?= count($groupNotices) === 1 ? 'entry' : 'entries' ?></span>
+              <?php endif; ?>
+            </div>
+
+            <!-- Announcements List -->
+            <?php if (empty($groupNotices)): ?>
+              <div style="padding: 36px 16px; text-align: center; color: #94a3b8; font-size: 14px;">
+                <?= !empty($search_query) ? 'No announcements matched your search query.' : 'No announcements published for this group yet.' ?>
+              </div>
+            <?php else: ?>
+              <div style="display: flex; flex-direction: column; gap: 24px;">
+                <?php foreach ($groupNotices as $index => $gn): ?>
+                  <div style="display: flex; align-items: flex-start; gap: 18px; <?= $index < count($groupNotices) - 1 ? 'padding-bottom: 22px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);' : '' ?>">
+
+                    <!-- Left: Vertical Date Block (Day / Month / Year) -->
+                    <div style="width: 48px; flex-shrink: 0; text-align: center; line-height: 1.15; padding-top: 2px;">
+                      <div style="font-size: 24px; font-weight: 700; color: #cbd5e1; letter-spacing: -0.02em; font-family: inherit;"><?= date('d', strtotime($gn['created_at'])) ?></div>
+                      <div style="font-size: 13px; font-weight: 600; color: #94a3b8; text-transform: capitalize;"><?= date('M', strtotime($gn['created_at'])) ?></div>
+                      <div style="font-size: 11px; color: #64748b; margin-top: 1px;"><?= date('Y', strtotime($gn['created_at'])) ?></div>
+                    </div>
+
+                    <!-- Right: Icon + Announcement Link + Excerpt -->
+                    <div style="flex: 1; min-width: 0;">
+                      <!-- Headline row with Megaphone Icon -->
+                      <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;">
+                        <div style="display: flex; align-items: flex-start; gap: 9px; line-height: 1.4; flex-wrap: wrap;">
+                          <!-- Megaphone SVG matching reference -->
+                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="flex-shrink: 0; margin-top: 1px;">
+                            <g transform="rotate(-12 12 12)">
+                              <path d="M3 10.5V13.5C3 14 3.4 14.5 4 14.5H6.5L11.5 18.5V5.5L6.5 9.5H4C3.4 9.5 3 10 3 10.5Z" fill="#38bdf8"/>
+                              <path d="M6 14.5V18C6 18.8 6.7 19.5 7.5 19.5C8.3 19.5 9 18.8 9 18V15" stroke="#38bdf8" stroke-width="1.8" stroke-linecap="round"/>
+                              <path d="M11.5 7.5L18 3.5V20.5L11.5 16.5V7.5Z" fill="#ffffff" stroke="#38bdf8" stroke-width="1.2"/>
+                              <ellipse cx="18" cy="12" rx="1.5" ry="8.5" fill="#38bdf8"/>
+                              <path d="M20.5 9C21.3 9.9 21.8 10.9 21.8 12C21.8 13.1 21.3 14.1 20.5 15" stroke="#38bdf8" stroke-width="1.8" stroke-linecap="round"/>
+                            </g>
+                          </svg>
+                          <a href="index.php?group=<?= $selected_group_id ?>&notice=<?= (int)$gn['id'] ?>" style="font-size: 15.5px; font-weight: 700; color: #58a6ff; text-decoration: underline; text-underline-offset: 3px; word-break: break-word;">
+                            Announcement • <?= e($gn['headline']) ?>
+                          </a>
+                        </div>
+                        <?php if (is_admin()): ?>
+                          <a href="index.php?action=delete_group_notice&notice_id=<?= (int)$gn['id'] ?>&group_id=<?= $selected_group_id ?>&redirect=<?= urlencode('index.php?group=' . $selected_group_id . '&view=announcements') ?>" onclick="return confirm('Delete this announcement?')" style="font-size: 11px; color: #f87171; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.28); padding: 2px 8px; border-radius: 4px; text-decoration: none; font-weight: 700; flex-shrink: 0; margin-left: 6px;">
+                            Delete
+                          </a>
+                        <?php endif; ?>
+                      </div>
+
+                      <!-- Excerpt Line with '... read more' Link -->
+                      <?php
+                        $rawText = $gn['message'];
+                        $clean = preg_replace('/^#{1,6}\s+/m', '', $rawText);
+                        $clean = preg_replace('/[*_]{1,3}([^*_]+)[*_]{1,3}/', '$1', $clean);
+                        $clean = preg_replace('/\[([^\]]+)\]\([^)]+\)/', '$1', $clean);
+                        $clean = preg_replace('/^\s*[\*\-\•]\s+/m', '', $clean);
+                        $clean = trim(preg_replace('/\s+/', ' ', strip_tags($clean)));
+                        $excerpt = mb_strimwidth($clean, 0, 220, '');
+                      ?>
+                      <div style="margin-top: 6px; font-size: 13.5px; color: #cbd5e1; line-height: 1.55; word-break: break-word;">
+                        <?= e($excerpt) ?> ... <a href="index.php?group=<?= $selected_group_id ?>&notice=<?= (int)$gn['id'] ?>" style="color: #58a6ff; text-decoration: underline; text-underline-offset: 2px; font-weight: 600;">read more</a>
+                      </div>
+                    </div>
+
+                  </div>
+                <?php endforeach; ?>
+              </div>
+            <?php endif; ?>
+
+          </div>
+
+        </div>
+
+      <?php else: ?>
+
+
+
+        <?php if ($single_post_id > 0): ?>
 
         <!-- Single Discussion View Top Bar -->
 
@@ -3482,6 +3796,8 @@ HTML PART starts here
 
     <?php endif; ?>
 
+  <?php endif; ?>
+
   </main>
 
 
@@ -3494,7 +3810,9 @@ HTML PART starts here
 
   <aside class="sidebar-right">
 
-    <!-- Popular Groups Card -->
+    <?php if (empty($current_view) && $selected_group_id <= 0 && $single_post_id <= 0 && empty($single_notice_id)): ?>
+
+    <!-- Popular Groups Card (Home Page Only) -->
 
     <div class="recent-discussions-card" style="margin-bottom: 16px;">
 
@@ -3559,9 +3877,140 @@ HTML PART starts here
 
     </div>
 
+    <?php endif; ?>
 
 
-    <!-- Recent Discussions Card -->
+
+    <?php if ($selected_group_id > 0): ?>
+
+    <!-- Latest Announcements Card (Group View Only) -->
+
+    <div class="recent-discussions-card" style="margin-bottom: 16px;">
+
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px;">
+
+        <h3 class="recent-card-header" style="margin: 0; padding: 0; font-size: 15px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;">
+
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary-blue); flex-shrink: 0;">
+
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+
+          </svg>
+
+          <span>Latest Announcements</span>
+
+        </h3>
+
+        <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+
+          <?php if (is_admin()): ?>
+
+            <button type="button" onclick="openAddNoticeModal(<?= $selected_group_id ?>)" style="white-space: nowrap; flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; background: rgba(29, 155, 240, 0.12); color: var(--primary-blue); border: 1px solid rgba(29, 155, 240, 0.28); border-radius: 9999px; padding: 3px 10px; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: all 0.15s ease;" onmouseover="this.style.background='var(--primary-blue)'; this.style.color='#fff';" onmouseout="this.style.background='rgba(29, 155, 240, 0.12)'; this.style.color='var(--primary-blue)';">
+
+              <span style="font-size: 13px; line-height: 1; font-weight: 800;">+</span>
+
+              <span>Add</span>
+
+            </button>
+
+          <?php elseif (!empty($groupNotices)): ?>
+
+            <a href="index.php?group=<?= $selected_group_id ?>&view=announcements" style="font-size: 12px; font-weight: 700; color: var(--primary-blue); text-decoration: none; white-space: nowrap;">View All</a>
+
+          <?php endif; ?>
+
+        </div>
+
+      </div>
+
+      <div class="recent-discussions-list">
+
+        <?php if (!empty($groupNotices)): ?>
+
+          <?php foreach ($groupNotices as $gn): ?>
+
+            <a href="index.php?group=<?= $selected_group_id ?>&notice=<?= (int)$gn['id'] ?>" class="recent-discussion-item" style="text-decoration: none; align-items: flex-start; gap: 8px;">
+
+              <div class="recent-discussion-left" style="min-width: 0; gap: 10px; flex: 1; align-items: flex-start;">
+
+                <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(29, 155, 240, 0.12); color: var(--primary-blue); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;">
+
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+
+                  </svg>
+
+                </div>
+
+                <div class="recent-info" style="min-width: 0; flex: 1;">
+
+                  <div class="recent-title" style="font-weight: 600; color: var(--text-main); font-size: 13.5px; white-space: normal; overflow: visible; text-overflow: clip; word-break: break-word; line-height: 1.4;">
+
+                    <?= e($gn['headline']) ?>
+
+                  </div>
+
+                  <div class="recent-meta" style="font-size: 11.5px; margin-top: 4px;">
+
+                    <?= time_ago($gn['created_at']) ?> · By <?= e($gn['author_name']) ?>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              <div class="recent-chevron" style="flex-shrink: 0; margin-top: 8px;">
+
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+
+                  <polyline points="9 18 15 12 9 6"></polyline>
+
+                </svg>
+
+              </div>
+
+            </a>
+
+          <?php endforeach; ?>
+
+          <div style="margin-top: 10px; text-align: center; border-top: 1px solid var(--border-color); padding-top: 10px;">
+            <a href="index.php?group=<?= $selected_group_id ?>&view=announcements" style="font-size: 12px; font-weight: 700; color: var(--primary-blue); text-decoration: none; display: inline-flex; align-items: center; gap: 5px;">
+              <span>View all announcements (<?= count($groupNotices) ?>)</span>
+              <span>&rarr;</span>
+            </a>
+          </div>
+
+        <?php else: ?>
+
+          <div style="padding: 16px 8px; text-align: center; color: var(--text-dim); font-size: 13px;">
+
+            <p style="margin: 0 0 4px 0;">No announcements yet.</p>
+
+            <?php if (is_admin()): ?>
+
+              <button type="button" onclick="openAddNoticeModal(<?= $selected_group_id ?>)" style="background: none; border: none; color: var(--primary-blue); font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: underline; padding: 0;">+ Post announcement</button>
+
+            <?php endif; ?>
+
+          </div>
+
+        <?php endif; ?>
+
+      </div>
+
+    </div>
+
+    <?php else: ?>
+
+    <!-- Recent Discussions Card (Home Feed Only) -->
 
     <div class="recent-discussions-card">
 
@@ -3613,9 +4062,9 @@ HTML PART starts here
 
     </div>
 
+    <?php endif; ?>
+
   </aside>
-
-
 
 </div>
 
@@ -4147,6 +4596,143 @@ HTML PART starts here
 
 </div>
 
+
+
+<!-- ADD IMPORTANT NOTICE MODAL (Admin Only) -->
+
+<!-- ADD GROUP ANNOUNCEMENT MODAL (Admin Only) -->
+
+<div class="modal-overlay" id="add-notice-modal" onclick="if(event.target===this) closeAddNoticeModal()">
+
+  <div class="modal-dialog">
+
+    <div class="modal-header">
+
+      <h3 class="modal-title" style="display: flex; align-items: center; gap: 10px;">
+
+        <span class="modal-title-icon" aria-hidden="true" style="color: var(--primary-blue); display: inline-flex; align-items: center;">
+
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+
+          </svg>
+
+        </span>
+
+        <span>Create Group Announcement</span>
+
+      </h3>
+
+      <button type="button" class="btn-close-modal" onclick="closeAddNoticeModal()">✕</button>
+
+    </div>
+
+    <form action="index.php" method="POST" id="add-notice-form" onsubmit="const ed=document.getElementById('notice-message-editor'); if(typeof syncRichEditor==='function') syncRichEditor(ed); const v=(document.getElementById('notice-message').value||'').trim(); if(!v || ed.innerText.trim()===''){ alert('Please enter an announcement message.'); return false; }">
+
+      <input type="hidden" name="action" value="create_group_notice">
+
+      <input type="hidden" name="group_id" id="notice-group-id" value="">
+
+      <input type="hidden" name="redirect" id="notice-redirect" value="">
+
+      <div class="modal-body">
+
+        <div class="form-group">
+
+          <label class="form-label" for="notice-headline">Headline / Subject *</label>
+
+          <input type="text" name="headline" id="notice-headline" class="form-input" placeholder="e.g. Critical Update: Examination Schedule & Rules" required maxlength="255">
+
+        </div>
+
+        <div class="form-group">
+
+          <label class="form-label" for="notice-message-editor">Announcement Message *</label>
+
+          <div class="announcement-editor-card">
+
+            <div class="announcement-editor-toolbar">
+
+              <div class="format-toolbar" data-target="notice-message" role="toolbar" aria-label="Text formatting">
+
+                <button type="button" class="format-btn" data-format="bold" title="Bold (Ctrl+B)">
+
+                  <span class="fmt-b">B</span>
+
+                </button>
+
+                <button type="button" class="format-btn" data-format="italic" title="Italic (Ctrl+I)">
+
+                  <span class="fmt-i">i</span>
+
+                </button>
+
+                <button type="button" class="format-btn" data-format="underline" title="Underline (Ctrl+U)">
+
+                  <span class="fmt-u">U</span>
+
+                </button>
+
+                <button type="button" class="format-btn" data-format="heading" title="Section Heading (H3)">
+
+                  <span class="fmt-heading">ᴛT</span>
+
+                </button>
+
+                <span class="format-divider" aria-hidden="true"></span>
+
+                <button type="button" class="format-btn" data-format="bullet" title="Bullet List">
+
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+
+                </button>
+
+                <button type="button" class="format-btn" data-format="link" title="Insert Link">
+
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+
+                </button>
+
+              </div>
+
+              <button type="button" onclick="insertAnnouncementTemplate()" class="btn-template-pill" style="display: inline-flex; align-items: center; gap: 5px; background: rgba(29, 155, 240, 0.12); color: var(--primary-blue); border: 1px solid rgba(29, 155, 240, 0.28); border-radius: var(--radius-pill); font-size: 11.5px; font-weight: 700; padding: 4px 11px; cursor: pointer; transition: all 0.15s ease;" onmouseover="this.style.background='rgba(29, 155, 240, 0.22)'" onmouseout="this.style.background='rgba(29, 155, 240, 0.12)'">
+
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h7v8l10-12h-7z"/></svg>
+
+                <span>Load Template</span>
+
+              </button>
+
+            </div>
+
+            <textarea name="message" id="notice-message" style="display: none;"></textarea>
+            <div class="announcement-editor-textarea rich-editor" id="notice-message-editor" contenteditable="true" data-sync="notice-message" data-placeholder="Write your announcement content here..." role="textbox" aria-multiline="true"></div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+
+        <button type="button" class="btn-modal-cancel" onclick="closeAddNoticeModal()">Cancel</button>
+
+        <button type="submit" class="btn-modal-submit">Publish Announcement</button>
+
+      </div>
+
+    </form>
+
+  </div>
+
+</div>
+
 <?php endif; ?>
 
 <?php endif; ?>
@@ -4361,6 +4947,81 @@ function closeEditGroupModal() {
 
   if (m) m.classList.remove('active');
 
+}
+
+function openAddNoticeModal(groupId, redirectUrl) {
+
+  const m = document.getElementById('add-notice-modal');
+
+  const groupInput = document.getElementById('notice-group-id');
+  const redirectInput = document.getElementById('notice-redirect');
+  const headlineInput = document.getElementById('notice-headline');
+  const messageInput = document.getElementById('notice-message');
+  const editor = document.getElementById('notice-message-editor');
+
+  if (groupInput) groupInput.value = groupId || '';
+  if (redirectInput) redirectInput.value = redirectUrl || '';
+  if (headlineInput) headlineInput.value = '';
+  if (messageInput) messageInput.value = '';
+  if (editor) {
+    editor.innerHTML = '';
+    if (typeof syncRichEditor === 'function') syncRichEditor(editor);
+  }
+
+  const noticeToolbar = m ? m.querySelector('.format-toolbar') : null;
+  if (noticeToolbar) {
+    noticeToolbar.querySelectorAll('.format-btn').forEach(btn => btn.classList.remove('active'));
+  }
+
+  if (m) {
+
+    m.classList.add('active');
+
+    setTimeout(function() {
+
+      if (headlineInput) headlineInput.focus();
+
+    }, 50);
+
+  }
+
+}
+
+function closeAddNoticeModal() {
+
+  const m = document.getElementById('add-notice-modal');
+
+  if (m) m.classList.remove('active');
+
+}
+
+function insertAnnouncementTemplate() {
+  const editor = document.getElementById('notice-message-editor');
+  const ta = document.getElementById('notice-message');
+  const headline = document.getElementById('notice-headline');
+  if (headline && !headline.value.trim()) {
+    headline.value = 'Important Notice: Schedule Update & Instructions';
+  }
+  const templateHtml = "<p>This is an official announcement for all members of this group.</p>" +
+                       "<h3>What you need to do</h3>" +
+                       "<ul>" +
+                         "<li>Review the scheduled guidelines and prepare all required materials.</li>" +
+                         "<li>Ensure your registered credentials are up-to-date on the student portal.</li>" +
+                         "<li>Strictly adhere to campus regulations during the session.</li>" +
+                       "</ul>" +
+                       "<h3>Important Schedule</h3>" +
+                       "<p>All sessions and checkpoints will commence promptly at the scheduled time.</p>" +
+                       "<h3>Support &amp; Inquiries</h3>" +
+                       "<p>If you require assistance or special accommodation, contact the coordinator.</p>";
+  if (editor) {
+    editor.innerHTML = templateHtml;
+    if (typeof syncRichEditor === 'function') syncRichEditor(editor);
+    editor.focus();
+    if (typeof updateToolbarStates === 'function') updateToolbarStates(editor);
+  } else if (ta) {
+    ta.value = templateHtml;
+    ta.focus();
+  }
 }
 
 

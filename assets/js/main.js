@@ -971,7 +971,8 @@ function syncRichEditor(editor) {
   if (!textarea) return;
 
   const text = editor.innerText.trim();
-  if (text.length === 0) {
+  const hasList = editor.querySelector('ul, ol, li');
+  if (text.length === 0 && !hasList) {
     textarea.value = '';
     editor.setAttribute('data-empty', 'true');
   } else {
@@ -1041,13 +1042,18 @@ function updateToolbarStates(editor) {
 
   let isBold = false;
   let isItalic = false;
+  let isUnderline = false;
   let isStrike = false;
   let isHeading = false;
+  let isList = false;
+  let isLink = false;
 
   try {
     isBold = document.queryCommandState('bold');
     isItalic = document.queryCommandState('italic');
+    isUnderline = document.queryCommandState('underline');
     isStrike = document.queryCommandState('strikeThrough');
+    isList = document.queryCommandState('insertUnorderedList');
   } catch (e) {}
 
   const sel = window.getSelection();
@@ -1055,6 +1061,12 @@ function updateToolbarStates(editor) {
     const parent = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
     if (parent && parent.closest('h1, h2, h3, h4, h5, h6')) {
       isHeading = true;
+    }
+    if (parent && parent.closest('ul, ol, li')) {
+      isList = true;
+    }
+    if (parent && parent.closest('a')) {
+      isLink = true;
     }
   }
 
@@ -1068,13 +1080,19 @@ function updateToolbarStates(editor) {
     if (matchesTarget || sameDialog || (!targetId && !editor.id)) {
       const bBtn = tb.querySelector('[data-format="bold"]');
       const iBtn = tb.querySelector('[data-format="italic"]');
+      const uBtn = tb.querySelector('[data-format="underline"]');
       const sBtn = tb.querySelector('[data-format="strike"]');
       const hBtn = tb.querySelector('[data-format="heading"]');
+      const lBtn = tb.querySelector('[data-format="bullet"], [data-format="list"]');
+      const aBtn = tb.querySelector('[data-format="link"]');
 
       if (bBtn) bBtn.classList.toggle('active', isBold);
       if (iBtn) iBtn.classList.toggle('active', isItalic);
+      if (uBtn) uBtn.classList.toggle('active', isUnderline);
       if (sBtn) sBtn.classList.toggle('active', isStrike);
       if (hBtn) hBtn.classList.toggle('active', isHeading);
+      if (lBtn) lBtn.classList.toggle('active', isList);
+      if (aBtn) aBtn.classList.toggle('active', isLink);
     }
   });
 }
@@ -1095,8 +1113,77 @@ function applyVisualFormat(editor, formatType) {
     document.execCommand('bold', false, null);
   } else if (formatType === 'italic') {
     document.execCommand('italic', false, null);
+  } else if (formatType === 'underline') {
+    document.execCommand('underline', false, null);
   } else if (formatType === 'strike') {
     document.execCommand('strikeThrough', false, null);
+  } else if (formatType === 'bullet' || formatType === 'list') {
+    // If editor has no text, create a pristine bullet list item
+    const text = editor.innerText.trim();
+    if (!text && (!editor.firstChild || editor.innerHTML === '' || editor.innerHTML === '<br>' || editor.innerHTML === '<p><br></p>')) {
+      editor.innerHTML = '<ul><li><br></li></ul>';
+      const li = editor.querySelector('li');
+      if (li && sel) {
+        const range = document.createRange();
+        range.setStart(li, 0);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    } else {
+      document.execCommand('insertUnorderedList', false, null);
+    }
+  } else if (formatType === 'link') {
+    let hasSelection = false;
+    let selectedText = '';
+    let range = null;
+
+    if (sel && sel.rangeCount > 0) {
+      range = sel.getRangeAt(0);
+      if (!sel.isCollapsed && editor.contains(sel.anchorNode)) {
+        selectedText = sel.toString().trim();
+        if (selectedText.length > 0) hasSelection = true;
+      }
+    }
+
+    let url = prompt('Enter URL (https://...):', 'https://');
+    if (url && url.trim() && url.trim() !== 'https://') {
+      url = url.trim();
+      if (!/^https?:\/\//i.test(url) && !url.startsWith('/')) {
+        url = 'https://' + url;
+      }
+
+      if (hasSelection) {
+        document.execCommand('createLink', false, url);
+        if (sel && sel.anchorNode) {
+          const parent = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
+          const a = parent ? parent.closest('a') : null;
+          if (a) {
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+          }
+        }
+      } else {
+        const linkText = prompt('Enter text to display:', url) || url;
+        const a = document.createElement('a');
+        a.href = url;
+        a.textContent = linkText;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+
+        if (range && editor.contains(range.commonAncestorContainer)) {
+          range.deleteContents();
+          range.insertNode(a);
+          const newRange = document.createRange();
+          newRange.setStartAfter(a);
+          newRange.setEndAfter(a);
+          sel.removeAllRanges();
+          sel.addRange(newRange);
+        } else {
+          editor.appendChild(a);
+        }
+      }
+    }
   }
 
   syncRichEditor(editor);
@@ -1127,8 +1214,11 @@ document.addEventListener('click', (e) => {
       openCreateThreadModal();
       setTimeout(() => {
         const editor = document.getElementById('post-content-editor');
-        if (editor) applyVisualFormat(editor, format);
-      }, 100);
+        if (editor) {
+          editor.focus();
+          applyVisualFormat(editor, format);
+        }
+      }, 150);
       return;
     }
   }
@@ -1147,9 +1237,28 @@ document.addEventListener('click', (e) => {
     const end = textarea.selectionEnd ?? 0;
     const val = textarea.value;
     const selected = val.substring(start, end);
-    const wrap = { bold: ['**', '**'], italic: ['*', '*'], strike: ['~~', '~~'], heading: ['## ', ''] }[format] || ['**', '**'];
-    if (selected.length > 0) {
-      textarea.value = val.substring(0, start) + wrap[0] + selected + wrap[1] + val.substring(end);
+    if (format === 'bullet' || format === 'list') {
+      const prefix = (start > 0 && val[start - 1] !== '\n') ? '\n' : '';
+      const replacement = prefix + '• ' + (selected || '');
+      textarea.setRangeText(replacement, start, end, 'end');
+    } else if (format === 'link') {
+      let url = prompt('Enter URL (https://...):', 'https://');
+      if (url && url.trim() && url.trim() !== 'https://') {
+        url = url.trim();
+        if (!/^https?:\/\//i.test(url) && !url.startsWith('/')) {
+          url = 'https://' + url;
+        }
+        const text = selected || prompt('Enter text to display:', url) || url;
+        const replacement = '[' + text + '](' + url + ')';
+        textarea.setRangeText(replacement, start, end, 'end');
+      }
+    } else {
+      const wrap = { bold: ['**', '**'], italic: ['*', '*'], underline: ['<u>', '</u>'], strike: ['~~', '~~'], heading: ['## ', ''] }[format] || ['**', '**'];
+      if (selected.length > 0) {
+        textarea.value = val.substring(0, start) + wrap[0] + selected + wrap[1] + val.substring(end);
+      } else {
+        textarea.setRangeText(wrap[0] + 'text' + wrap[1], start, end, 'select');
+      }
     }
     textarea.focus();
     textarea.dispatchEvent(new Event('input', { bubbles: true }));

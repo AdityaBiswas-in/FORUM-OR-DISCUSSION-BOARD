@@ -171,3 +171,19 @@ CREATE TABLE `replies` (
   CONSTRAINT `fk_replies_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_replies_parent` FOREIGN KEY (`parent_id`) REFERENCES `replies` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- 11. Table: group_notices
+-- Admin important announcements/notices per group (read-only)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `group_notices` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `group_id` INT NOT NULL,
+  `user_id` INT NOT NULL,
+  `headline` VARCHAR(255) NOT NULL,
+  `message` LONGTEXT NOT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_group_notices_group` (`group_id`),
+  CONSTRAINT `fk_group_notices_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_group_notices_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
