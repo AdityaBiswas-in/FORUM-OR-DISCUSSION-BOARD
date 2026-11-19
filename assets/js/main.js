@@ -1031,7 +1031,9 @@ function getActiveRichEditor(toolbar) {
 
 function ensureEditorFocus(editor) {
   if (!editor) return;
-  editor.focus();
+  if (document.activeElement !== editor) {
+    editor.focus();
+  }
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0 || !editor.contains(sel.anchorNode)) {
     const range = document.createRange();
@@ -1063,23 +1065,29 @@ function updateToolbarStates(editor) {
   let isList = false;
   let isLink = false;
 
-  try {
-    isBold = document.queryCommandState('bold');
-    isItalic = document.queryCommandState('italic');
-    isUnderline = document.queryCommandState('underline');
-    isStrike = document.queryCommandState('strikeThrough');
-    isList = document.queryCommandState('insertUnorderedList');
-  } catch (e) {}
+  const isFocused = (document.activeElement === editor || editor.contains(document.activeElement));
+
+  if (isFocused) {
+    try {
+      isBold = document.queryCommandState('bold');
+      isItalic = document.queryCommandState('italic');
+      isUnderline = document.queryCommandState('underline');
+      isStrike = document.queryCommandState('strikeThrough');
+      isList = document.queryCommandState('insertUnorderedList');
+    } catch (e) {}
+  }
 
   const sel = window.getSelection();
   if (sel && sel.anchorNode && editor.contains(sel.anchorNode)) {
     const parent = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
     if (parent) {
-      if (parent.closest('b, strong')) isBold = true;
-      if (parent.closest('i, em')) isItalic = true;
-      if (parent.closest('u')) isUnderline = true;
-      if (parent.closest('s, strike, del') || (window.getComputedStyle(parent).textDecorationLine || '').includes('line-through')) {
-        isStrike = true;
+      if (!isFocused) {
+        if (parent.closest('b, strong')) isBold = true;
+        if (parent.closest('i, em')) isItalic = true;
+        if (parent.closest('u')) isUnderline = true;
+        if (parent.closest('s, strike, del') || (window.getComputedStyle(parent).textDecorationLine || '').includes('line-through')) {
+          isStrike = true;
+        }
       }
       if (parent.closest('h1, h2, h3, h4, h5, h6')) {
         isHeading = true;
@@ -1099,6 +1107,8 @@ function updateToolbarStates(editor) {
     const matchesTarget = targetId && (editor.id === targetId || editor.id === targetId + '-editor');
     const sameDialog = (tb.closest('.modal-dialog') && tb.closest('.modal-dialog') === editor.closest('.modal-dialog')) ||
                        (tb.closest('form') && tb.closest('form') === editor.closest('form')) ||
+                       (tb.closest('.reply-composer-box') && tb.closest('.reply-composer-box') === editor.closest('.reply-composer-box')) ||
+                       (tb.closest('.reply-composer-form') && tb.closest('.reply-composer-form') === editor.closest('.reply-composer-form')) ||
                        (tb.closest('.reply-card') && tb.closest('.reply-card') === editor.closest('.reply-card'));
 
     if (matchesTarget || sameDialog || (!targetId && !editor.id) || (!targetId && editor.id === 'post-content-editor')) {
@@ -1121,98 +1131,24 @@ function updateToolbarStates(editor) {
   });
 }
 
-function toggleInlineFormat(editor, formatType) {
+function applyInlineFormat(editor, formatType) {
   if (!editor) return;
   ensureEditorFocus(editor);
 
-  const formatConfig = {
-    bold: { tag: 'b', selector: 'b, strong', cmd: 'bold' },
-    italic: { tag: 'i', selector: 'i, em', cmd: 'italic' },
-    underline: { tag: 'u', selector: 'u', cmd: 'underline' },
-    strike: { tag: 'del', selector: 's, strike, del', cmd: 'strikeThrough' }
+  const cmdMap = {
+    bold: 'bold',
+    italic: 'italic',
+    underline: 'underline',
+    strike: 'strikeThrough'
   };
 
-  const config = formatConfig[formatType];
-  if (!config) return;
+  const cmd = cmdMap[formatType];
+  if (!cmd) return;
 
-  const sel = window.getSelection();
-  if (!sel || !editor.contains(sel.anchorNode)) return;
-
-  const hasSelection = !sel.isCollapsed && sel.toString().length > 0;
-
-  if (hasSelection) {
-    try {
-      document.execCommand(config.cmd, false, null);
-    } catch (e) {}
-    syncRichEditor(editor);
-    updateToolbarStates(editor);
-    return;
-  }
-
-  // Collapsed selection: user toggling style before typing
-  const range = sel.getRangeAt(0);
-  const parent = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
-  const existingNode = parent ? parent.closest(config.selector) : null;
-
-  if (existingNode && editor.contains(existingNode)) {
-    // Toggle OFF:
-    const cleanText = (existingNode.textContent || '').replace(/\u200B/g, '');
-    if (cleanText.length === 0) {
-      const p = existingNode.parentNode;
-      const placeholder = document.createTextNode('\u200B');
-      p.replaceChild(placeholder, existingNode);
-      const newRange = document.createRange();
-      newRange.setStart(placeholder, 1);
-      newRange.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(newRange);
-    } else {
-      let next = existingNode.nextSibling;
-      if (!next || next.nodeType !== 3) {
-        next = document.createTextNode('\u200B');
-        if (existingNode.nextSibling) {
-          existingNode.parentNode.insertBefore(next, existingNode.nextSibling);
-        } else {
-          existingNode.parentNode.appendChild(next);
-        }
-      }
-      const newRange = document.createRange();
-      newRange.setStart(next, next.nodeType === 3 ? Math.min(1, next.length) : 0);
-      newRange.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(newRange);
-    }
-    try {
-      document.execCommand(config.cmd, false, null);
-    } catch (e) {}
-  } else {
-    // Toggle ON:
-    const el = document.createElement(config.tag);
-    el.innerHTML = '&#8203;';
-
-    const editorText = (editor.innerText || '').replace(/\u200B/g, '').trim();
-    if (!editorText && (!editor.firstChild || editor.innerHTML === '' || editor.innerHTML === '<br>' || editor.innerHTML === '<p><br></p>' || editor.innerHTML === '<div><br></div>')) {
-      editor.innerHTML = '';
-      editor.appendChild(el);
-    } else {
-      range.deleteContents();
-      range.insertNode(el);
-    }
-
-    const newRange = document.createRange();
-    if (el.firstChild) {
-      newRange.setStart(el.firstChild, 1);
-    } else {
-      newRange.setStart(el, 0);
-    }
-    newRange.collapse(true);
-    sel.removeAllRanges();
-    sel.addRange(newRange);
-
-    try {
-      document.execCommand(config.cmd, false, null);
-    } catch (e) {}
-  }
+  try {
+    document.execCommand('styleWithCSS', false, false);
+    document.execCommand(cmd, false, null);
+  } catch (e) {}
 
   syncRichEditor(editor);
   updateToolbarStates(editor);
@@ -1305,7 +1241,7 @@ function applyVisualFormat(editor, formatType) {
       }
     }
   } else if (formatType === 'bold' || formatType === 'italic' || formatType === 'underline' || formatType === 'strike') {
-    toggleInlineFormat(editor, formatType);
+    applyInlineFormat(editor, formatType);
     return;
   } else if (formatType === 'bullet' || formatType === 'list') {
     let listNode = null;
