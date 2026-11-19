@@ -455,7 +455,7 @@ HTML PART
 
             </svg>
 
-            <span>Groups</span>
+            <span>Community</span>
 
           </a>
 
@@ -863,7 +863,7 @@ HTML PART
 
       <a href="profile.php?id=<?= $profileId ?>&tab=groups" class="profile-tab-item <?= $tab === 'groups' ? 'active' : '' ?>">
 
-        <span>Groups</span>
+        <span>Community</span>
 
         <span class="profile-tab-count"><?= $groupCount ?></span>
 

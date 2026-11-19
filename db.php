@@ -71,7 +71,11 @@ if (!function_exists('format_post_content')) {
             $processed[] = '</ul>';
         }
         $safe = implode("\n", $processed);
-        return nl2br($safe);
+        $res = nl2br($safe);
+        $res = preg_replace('/(<(?:ul|ol)[^>]*>)\s*<br\s*\/?>/i', '$1', $res);
+        $res = preg_replace('/<br\s*\/?>\s*(<\/?(?:ul|ol|li)[^>]*>)/i', '$1', $res);
+        $res = preg_replace('/(<\/(?:li|ul|ol)>)\s*<br\s*\/?>/i', '$1', $res);
+        return $res;
     }
 }
 

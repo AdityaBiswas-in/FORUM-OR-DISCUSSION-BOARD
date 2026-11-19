@@ -153,8 +153,8 @@ $mobileSearchVal = trim($_GET['q'] ?? '');
       <span class="mobile-nav-label">Home</span>
     </a>
 
-    <!-- Groups Tab -->
-    <a href="index.php?view=groups" class="mobile-nav-btn <?= (isset($_GET['view']) && $_GET['view'] === 'groups') ? 'active' : '' ?>" aria-label="Groups">
+    <!-- Community Tab -->
+    <a href="index.php?view=groups" class="mobile-nav-btn <?= (isset($_GET['view']) && $_GET['view'] === 'groups') ? 'active' : '' ?>" aria-label="Community">
       <div class="mobile-nav-icon-wrap">
         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -168,7 +168,7 @@ $mobileSearchVal = trim($_GET['q'] ?? '');
 
       </div>
 
-      <span class="mobile-nav-label">Groups</span>
+      <span class="mobile-nav-label">Community</span>
 
     </a>
 
@@ -364,7 +364,7 @@ $mobileSearchVal = trim($_GET['q'] ?? '');
 
         </svg>
 
-        <span>Groups</span>
+        <span>Community</span>
 
       </a>
 

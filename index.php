@@ -157,9 +157,10 @@ function renderReplyNode(array $rep, array $childrenByParent, array $repliesById
             <input type="hidden" name="action" value="edit_reply">
             <input type="hidden" name="reply_id" value="<?= $repId ?>">
             <div style="display: flex; justify-content: flex-end; margin-bottom: 4px;">
-              <?php render_format_toolbar(); ?>
+              <?php render_format_toolbar('reply-edit-content-' . $repId); ?>
             </div>
-            <textarea name="content" class="reply-textarea" style="width: 100%; min-height: 60px; margin-bottom: 8px;" required><?= e($rep['content']) ?></textarea>
+            <textarea name="content" id="reply-edit-content-<?= $repId ?>" class="reply-textarea-hidden" style="display: none;"><?= e($rep['content']) ?></textarea>
+            <div class="x-compose-textarea rich-editor reply-rich-editor" id="reply-edit-content-<?= $repId ?>-editor" contenteditable="true" data-sync="reply-edit-content-<?= $repId ?>" role="textbox" aria-multiline="true" style="min-height: 55px; width: 100%; border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main); font-family: inherit; font-size: 13.5px; outline: none; padding: 8px 10px; margin-bottom: 8px; background: var(--bg-card); word-break: break-word;"><?= format_post_content($rep['content']) ?></div>
             <div style="display: flex; gap: 8px;">
               <button type="submit" class="btn-post-reply" style="padding: 5px 14px; font-size: 12px;">Save</button>
               <button type="button" class="btn-modal-cancel" style="padding: 5px 14px; font-size: 12px;" onclick="toggleEditReplyForm(<?= $repId ?>)">Cancel</button>
@@ -218,13 +219,14 @@ function renderReplyNode(array $rep, array $childrenByParent, array $repliesById
 
             <input type="hidden" name="parent_id" value="<?= $repId ?>">
 
-            <textarea name="content" class="reply-textarea" style="width: 100%; min-height: 55px; margin-bottom: 8px;" placeholder="Replying to @<?= e($rep['author_username']) ?>..." required></textarea>
+            <textarea name="content" id="nested-reply-content-<?= $repId ?>" class="reply-textarea-hidden" style="display: none;"></textarea>
+            <div class="x-compose-textarea rich-editor reply-rich-editor" id="nested-reply-content-<?= $repId ?>-editor" contenteditable="true" data-sync="nested-reply-content-<?= $repId ?>" data-placeholder="Replying to @<?= e($rep['author_username']) ?>..." role="textbox" aria-multiline="true" style="min-height: 48px; width: 100%; background: transparent; border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main); font-family: inherit; font-size: 13.5px; outline: none; padding: 8px 10px; margin-bottom: 8px; word-break: break-word;"></div>
 
             <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
 
               <div style="display: flex; align-items: center; gap: 4px;">
 
-                <?php render_format_toolbar(); ?>
+                <?php render_format_toolbar('nested-reply-content-' . $repId); ?>
 
                 <label class="btn-attach-image" style="cursor: pointer; font-size: 12px; color: var(--primary-blue);">
 
@@ -1636,7 +1638,7 @@ HTML PART starts here
 
             </svg>
 
-            <span>Groups</span>
+            <span>Community</span>
 
           </a>
 
@@ -1820,7 +1822,7 @@ HTML PART starts here
 
           <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3z"/></svg>
 
-          Browse Groups
+          Browse Community
 
         </a>
 
@@ -2118,7 +2120,7 @@ HTML PART starts here
               <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
               <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
             </svg>
-            <span>Groups</span>
+            <span>Community</span>
             <span class="admin-subnav-count"><?= count($adminGroups ?? []) ?></span>
           </a>
           <a href="#admin-moderation-section" class="admin-subnav-link">
@@ -2428,7 +2430,7 @@ HTML PART starts here
           <div>
 
             <h1 class="groups-directory-title">
-              Groups
+              Community
               <?php if (!empty($allGroups)): ?>
                 <span class="groups-count-pill"><?= count($allGroups) ?></span>
               <?php endif; ?>
@@ -3567,7 +3569,8 @@ HTML PART starts here
 
                       <div style="flex: 1;">
 
-                        <textarea name="content" class="reply-textarea" placeholder="Post your reply..." rows="2" style="width: 100%; background: transparent; border: none; color: var(--text-main); font-family: inherit; font-size: 13.5px; resize: vertical; outline: none;" required></textarea>
+                        <textarea name="content" id="reply-content-<?= $postId ?>" class="reply-textarea-hidden" style="display: none;"></textarea>
+                        <div class="x-compose-textarea rich-editor reply-rich-editor" id="reply-content-<?= $postId ?>-editor" contenteditable="true" data-sync="reply-content-<?= $postId ?>" data-placeholder="Post your reply..." role="textbox" aria-multiline="true" style="min-height: 44px; width: 100%; background: transparent; border: none; color: var(--text-main); font-family: inherit; font-size: 13.5px; outline: none; padding: 4px 0; word-break: break-word;"></div>
 
                         
 
@@ -3589,7 +3592,7 @@ HTML PART starts here
 
                           <div style="display: flex; align-items: center; gap: 4px;">
 
-                            <?php render_format_toolbar(); ?>
+                            <?php render_format_toolbar('reply-content-' . $postId); ?>
 
                             <label for="reply-image-input-<?= $postId ?>" style="cursor: pointer; color: var(--primary-blue); display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 600;">
 
@@ -3818,7 +3821,7 @@ HTML PART starts here
 
       <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 8px 16px;">
 
-        <h3 class="recent-card-header" style="padding: 0; margin: 0; font-size: 15px;">Groups</h3>
+        <h3 class="recent-card-header" style="padding: 0; margin: 0; font-size: 15px;">Community</h3>
 
         <a href="index.php?view=groups" style="font-size: 12px; font-weight: 700; color: var(--primary-blue); text-decoration: none;">View All</a>
 
@@ -4779,15 +4782,15 @@ function toggleRepliesSection(postId) {
 
     if (isBoxHidden) {
 
-      const textarea = composerBox.querySelector('textarea');
+      const editor = composerBox.querySelector('.rich-editor') || composerBox.querySelector('textarea');
 
-      if (textarea) {
+      if (editor) {
 
         setTimeout(function() {
 
-          textarea.focus();
+          editor.focus();
 
-          textarea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          editor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
         }, 50);
 
@@ -4807,15 +4810,15 @@ function toggleRepliesSection(postId) {
 
   if (isHidden) {
 
-    const textarea = section.querySelector('textarea');
+    const editor = section.querySelector('.rich-editor') || section.querySelector('textarea');
 
-    if (textarea) {
+    if (editor) {
 
       setTimeout(function() {
 
-        textarea.focus();
+        editor.focus();
 
-        textarea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        editor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
       }, 50);
 
@@ -4841,9 +4844,9 @@ function toggleEditReplyForm(replyId) {
 
   if (isHidden) {
 
-    const textarea = form.querySelector('textarea');
+    const editor = form.querySelector('.rich-editor') || form.querySelector('textarea');
 
-    if (textarea) textarea.focus();
+    if (editor) editor.focus();
 
   }
 
@@ -4861,9 +4864,9 @@ function toggleNestedComposer(replyId) {
 
   if (isHidden) {
 
-    const textarea = composer.querySelector('textarea');
+    const editor = composer.querySelector('.rich-editor') || composer.querySelector('textarea');
 
-    if (textarea) textarea.focus();
+    if (editor) editor.focus();
 
   }
 
@@ -4881,7 +4884,7 @@ function handlePostCardClick(event, postId, groupId) {
 
   const target = event.target;
 
-  if (target.closest('button, a, input, textarea, label, .post-actions-menu, .post-replies-collapse, .post-media-grid, .post-action-btn, .reply-card')) {
+  if (target.closest('button, a, input, textarea, label, .rich-editor, .post-actions-menu, .post-replies-collapse, .post-media-grid, .post-action-btn, .reply-card')) {
 
     return;
 

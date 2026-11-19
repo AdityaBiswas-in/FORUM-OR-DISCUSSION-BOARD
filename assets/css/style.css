@@ -832,6 +832,24 @@ img, svg {
   text-decoration: underline;
 }
 
+.post-body-text h3,
+.reply-body-text h3 {
+  font-size: 1.2em;
+  font-weight: 700;
+  margin: 8px 0 4px 0;
+  color: var(--text-main);
+}
+
+.post-body-text del,
+.post-body-text s,
+.post-body-text strike,
+.reply-body-text del,
+.reply-body-text s,
+.reply-body-text strike {
+  text-decoration: line-through;
+  opacity: 0.85;
+}
+
 /* Multi-Image Adaptive Layout */
 .post-media-grid {
   display: grid;
@@ -1767,8 +1785,62 @@ img, svg {
 
 .rich-editor:has(ul)::before,
 .rich-editor:has(ol)::before,
-.rich-editor:has(li)::before {
+.rich-editor:has(li)::before,
+.rich-editor:has(h1)::before,
+.rich-editor:has(h2)::before,
+.rich-editor:has(h3)::before,
+.rich-editor:has(h4)::before,
+.rich-editor:has(h5)::before,
+.rich-editor:has(h6)::before,
+.rich-editor:has(del)::before,
+.rich-editor:has(strike)::before,
+.rich-editor:has(s)::before,
+.rich-editor:has(a)::before,
+.rich-editor:has(b)::before,
+.rich-editor:has(strong)::before,
+.rich-editor:has(i)::before,
+.rich-editor:has(em)::before,
+.rich-editor:has(u)::before {
   display: none !important;
+}
+
+.reply-rich-editor.rich-editor {
+  min-height: 44px !important;
+  max-height: 220px !important;
+  font-size: 13.5px !important;
+  line-height: 1.45 !important;
+  padding: 4px 0 !important;
+}
+
+.reply-rich-editor.rich-editor:empty::before,
+.reply-rich-editor.rich-editor[data-empty="true"]::before {
+  content: attr(data-placeholder);
+  color: var(--text-dim) !important;
+  font-size: 13.5px !important;
+}
+
+.reply-body-text ul,
+.reply-body-text ol {
+  padding-left: 22px !important;
+  margin: 6px 0 8px 0 !important;
+}
+
+.reply-body-text ul {
+  list-style-type: disc !important;
+}
+
+.reply-body-text ol {
+  list-style-type: decimal !important;
+}
+
+.reply-body-text li {
+  margin-bottom: 2px !important;
+  display: list-item !important;
+}
+
+.reply-body-text a {
+  color: var(--primary-blue) !important;
+  text-decoration: underline !important;
 }
 
 .x-tool-btn {
