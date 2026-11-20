@@ -5488,12 +5488,15 @@ select:focus-visible {
 /* ======================================================== */
 .group-meta-members-btn {
   transition: all 0.15s ease;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.group-meta-members-btn:hover {
+  color: var(--primary-blue) !important;
 }
 .group-meta-members-btn:hover .group-meta-num {
   color: var(--primary-blue) !important;
-}
-.group-meta-members-btn:hover {
-  color: var(--text-main) !important;
 }
 
 .gm-tab-btn {

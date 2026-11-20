@@ -282,7 +282,7 @@ function renderReplyNode(array $rep, array $childrenByParent, array $repliesById
 
 
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
-if ($action !== '' && !$currentUser) {
+if ($action !== '' && $action !== 'get_group_members' && !$currentUser) {
     if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
         header('Content-Type: application/json');
         echo json_encode(['success' => false, 'redirect' => 'register.php']);
@@ -3227,9 +3227,9 @@ HTML PART starts here
 
                 <div class="group-meta-stats" style="margin-top: 6px;">
 
-                  <button type="button" class="group-meta-item group-meta-members-btn" onclick="openGroupMembersModal(<?= $selected_group_id ?>, '<?= e(addslashes($currentGroup['name'])) ?>')" title="<?= is_admin() ? 'Click to view & manage members (Remove / Ban)' : 'Click to view members' ?>" style="background: none; border: none; padding: 0; color: inherit; font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; text-decoration: none;">
+                  <button type="button" class="group-meta-item group-meta-members-btn" onclick="openGroupMembersModal(<?= $selected_group_id ?>, '<?= e(addslashes($currentGroup['name'])) ?>')" title="<?= is_admin() ? 'Click to view & manage members (Remove / Ban)' : 'Click to view members' ?>" style="background: none; border: none; padding: 0; color: inherit; font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; text-decoration: underline; text-underline-offset: 3px;">
 
-                    <span class="group-meta-num" id="group-header-member-count" style="text-decoration: underline; text-underline-offset: 3px;"><?= (int)$currentGroup['member_count'] ?></span> <?= (int)$currentGroup['member_count'] === 1 ? 'member' : 'members' ?>
+                    <span class="group-meta-num" id="group-header-member-count"><?= (int)$currentGroup['member_count'] ?></span> <?= (int)$currentGroup['member_count'] === 1 ? 'member' : 'members' ?>
 
                   </button>
 

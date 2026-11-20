@@ -1614,7 +1614,8 @@ function loadGroupMembersData(groupId) {
   if (emptyEl) emptyEl.style.display = 'none';
 
   fetch(`index.php?action=get_group_members&group_id=${groupId}`, {
-    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    credentials: 'same-origin'
   })
     .then(res => res.json())
     .then(data => {
@@ -1778,6 +1779,12 @@ function filterGroupMembersList() {
     ? document.getElementById('group-banned-members-list')
     : document.getElementById('group-active-members-list');
   const emptyEl = document.getElementById('group-members-empty');
+  const loadingEl = document.getElementById('group-members-loading');
+
+  if (loadingEl && loadingEl.style.display !== 'none') {
+    if (emptyEl) emptyEl.style.display = 'none';
+    return;
+  }
 
   if (!container) return;
 
