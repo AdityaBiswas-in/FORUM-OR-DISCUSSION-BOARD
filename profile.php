@@ -21,24 +21,6 @@ if (!empty($_SESSION['user_id'])) {
 }
 $currentUserId = $currentUser ? (int)$currentUser['id'] : 0;
 
-if (!function_exists('time_ago')) {
-    function time_ago(?string $datetime): string {
-        if (!$datetime) return 'just now';
-
-        $d = time() - strtotime($datetime);
-
-        if ($d < 60) return 'just now';
-
-        if ($d < 3600) return floor($d / 60) . 'm ago';
-
-        if ($d < 86400) return floor($d / 3600) . 'h ago';
-
-        if ($d < 604800) return floor($d / 86400) . 'd ago';
-
-        return date('M j, Y', strtotime($datetime));
-    }
-}
-
 // Target User Resolution
 
 $targetId = (int)($_GET['id'] ?? 0);

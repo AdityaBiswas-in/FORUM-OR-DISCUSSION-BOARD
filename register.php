@@ -107,20 +107,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
             $defaultAvatar = 'assets/images/avatar_default.svg';
 
-            // Insert into the designated table
-            if ($role === 'student') {
-                $stmt = $conn->prepare("INSERT INTO students (id, name, email, password, avatar, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
-                $stmt->bind_param("sssss", $account_id, $name, $email, $hashedPassword, $defaultAvatar);
-                $stmt->execute();
-            } elseif ($role === 'faculty' && table_exists('faculty', $conn)) {
-                $stmt = $conn->prepare("INSERT INTO faculty (id, name, email, password, avatar, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
-                $stmt->bind_param("sssss", $account_id, $name, $email, $hashedPassword, $defaultAvatar);
-                $stmt->execute();
-            } elseif ($role === 'admin') {
-                $stmt = $conn->prepare("INSERT INTO admins (id, name, email, password, avatar, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
-                $stmt->bind_param("sssss", $account_id, $name, $email, $hashedPassword, $defaultAvatar);
-                $stmt->execute();
+            // Insert into the designated role table
+            $targetTable = ($role === 'admin') ? 'admins' : (($role === 'faculty') ? 'faculty' : 'students');
+            if ($role !== 'faculty' || table_exists('faculty', $conn)) {
+                $conn->execute_query(
+                    "INSERT INTO $targetTable (id, name, email, password, avatar, created_at) VALUES (?, ?, ?, ?, ?, NOW())",
+                    [$account_id, $name, $email, $hashedPassword, $defaultAvatar]
+                );
+            }
 
+            if ($role === 'admin') {
                 // Mark as registered in authorized_admins if present
                 $conn->execute_query("UPDATE authorized_admins SET is_registered = 1 WHERE admin_id = ?", [$account_id]);
             }
@@ -310,6 +306,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
        4. CLIENT-SIDE VALIDATION & UI SCRIPTS
        ========================================================================== -->
   <script>
+    function updateAuthThemeUI(theme) {
       document.documentElement.setAttribute('data-theme', theme);
       const icon = document.getElementById('auth-theme-icon');
       const text = document.getElementById('auth-theme-text');

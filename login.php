@@ -43,6 +43,29 @@ $login_input = trim($_GET['email'] ?? '') ?: $registeredId ?: trim($_GET['userna
 // 2. AUTHENTICATION CONTROLLER HANDLER (POST)
 // Processes standard credential verification and demo instant-login requests.
 // ==========================================================================
+
+/**
+ * Synchronizes user into unified users table and initializes session state
+ */
+function login_user_session(array $account, string $role, mysqli $conn): void {
+    $u = $conn->execute_query("SELECT id FROM users WHERE uid = ? OR email = ? LIMIT 1", [$account['id'], $account['email']])->fetch_assoc();
+    $userId = $u ? (int)$u['id'] : 0;
+    if (!$userId) {
+        $conn->execute_query(
+            "INSERT INTO users (uid, username, name, email, role, account_type, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())",
+            [$account['id'], $account['name'], $account['name'], $account['email'], $role, $role, $account['avatar']]
+        );
+        $userId = (int)$conn->insert_id;
+    }
+    $_SESSION['user_id']      = $userId;
+    $_SESSION['account_id']   = $account['id'];
+    $_SESSION['account_type'] = $role;
+    $_SESSION['user_role']    = $role;
+    $_SESSION['user_name']    = $account['name'];
+    header("Location: " . ($role === 'admin' ? "index.php?view=admin" : "index.php"));
+    exit;
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $action = $_POST['action'] ?? 'login';
     $login_role = strtolower(trim($_POST['login_role'] ?? 'student'));
@@ -56,21 +79,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         if ($login_role === 'student') {
             $account = $conn->execute_query("SELECT * FROM students WHERE email = ? LIMIT 1", [$input])->fetch_assoc();
             if ($account) {
-                $u = $conn->execute_query("SELECT id FROM users WHERE uid = ? OR email = ? LIMIT 1", [$account['id'], $account['email']])->fetch_assoc();
-                $userId = $u ? (int)$u['id'] : 0;
-                if (!$userId) {
-                    $conn->execute_query("INSERT INTO users (uid, username, name, email, role, account_type, avatar, created_at) VALUES (?, ?, ?, ?, 'student', 'student', ?, NOW())", [$account['id'], $account['name'], $account['name'], $account['email'], $account['avatar']]);
-                    $userId = (int)$conn->insert_id;
-                }
-                $_SESSION['user_id'] = $userId;
-                $_SESSION['account_id'] = $account['id'];
-                $_SESSION['account_type'] = 'student';
-                $_SESSION['user_role'] = 'student';
-                $_SESSION['user_name'] = $account['name'];
-                header("Location: index.php");
-                exit;
+                login_user_session($account, 'student', $conn);
             } else {
-                // Check if account belongs to another portal
                 $inOther = (table_exists('faculty', $conn) && $conn->execute_query("SELECT 1 FROM faculty WHERE email = ? LIMIT 1", [$input])->fetch_row())
                         || $conn->execute_query("SELECT 1 FROM admins WHERE email = ? LIMIT 1", [$input])->fetch_row();
                 $error = $inOther 
@@ -80,19 +90,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         } elseif ($login_role === 'faculty') {
             $account = table_exists('faculty', $conn) ? $conn->execute_query("SELECT * FROM faculty WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_assoc() : null;
             if ($account) {
-                $u = $conn->execute_query("SELECT id FROM users WHERE uid = ? OR email = ? LIMIT 1", [$account['id'], $account['email']])->fetch_assoc();
-                $userId = $u ? (int)$u['id'] : 0;
-                if (!$userId) {
-                    $conn->execute_query("INSERT INTO users (uid, username, name, email, role, account_type, avatar, created_at) VALUES (?, ?, ?, ?, 'faculty', 'faculty', ?, NOW())", [$account['id'], $account['name'], $account['name'], $account['email'], $account['avatar']]);
-                    $userId = (int)$conn->insert_id;
-                }
-                $_SESSION['user_id'] = $userId;
-                $_SESSION['account_id'] = $account['id'];
-                $_SESSION['account_type'] = 'faculty';
-                $_SESSION['user_role'] = 'faculty';
-                $_SESSION['user_name'] = $account['name'];
-                header("Location: index.php");
-                exit;
+                login_user_session($account, 'faculty', $conn);
             } else {
                 $inOther = $conn->execute_query("SELECT 1 FROM students WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_row()
                         || $conn->execute_query("SELECT 1 FROM admins WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$input, $input, $input])->fetch_row();
@@ -103,19 +101,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         } elseif ($login_role === 'admin') {
             $account = $conn->execute_query("SELECT * FROM admins WHERE email = ? LIMIT 1", [$input])->fetch_assoc();
             if ($account) {
-                $u = $conn->execute_query("SELECT id FROM users WHERE uid = ? OR email = ? LIMIT 1", [$account['id'], $account['email']])->fetch_assoc();
-                $userId = $u ? (int)$u['id'] : 0;
-                if (!$userId) {
-                    $conn->execute_query("INSERT INTO users (uid, username, name, email, role, account_type, avatar, created_at) VALUES (?, ?, ?, ?, 'admin', 'admin', ?, NOW())", [$account['id'], $account['name'], $account['name'], $account['email'], $account['avatar']]);
-                    $userId = (int)$conn->insert_id;
-                }
-                $_SESSION['user_id'] = $userId;
-                $_SESSION['account_id'] = $account['id'];
-                $_SESSION['account_type'] = 'admin';
-                $_SESSION['user_role'] = 'admin';
-                $_SESSION['user_name'] = $account['name'];
-                header("Location: index.php?view=admin");
-                exit;
+                login_user_session($account, 'admin', $conn);
             } else {
                 $inOther = $conn->execute_query("SELECT 1 FROM students WHERE email = ? LIMIT 1", [$input])->fetch_row()
                         || (table_exists('faculty', $conn) && $conn->execute_query("SELECT 1 FROM faculty WHERE email = ? LIMIT 1", [$input])->fetch_row());
@@ -132,113 +118,52 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         if ($login_input === '' || $password === '') {
             $error = 'Please fill in all fields.';
         } elseif ($login_role === 'student') {
-            // Authenticate against students table using registered email address and password
             $account = $conn->execute_query("SELECT * FROM students WHERE email = ? LIMIT 1", [$login_input])->fetch_assoc();
-
             if ($account) {
                 if (password_verify($password, $account['password']) || $account['password'] === $password) {
                     if ($account['password'] === $password) {
                         $conn->execute_query("UPDATE students SET password = ? WHERE id = ?", [password_hash($password, PASSWORD_DEFAULT), $account['id']]);
                     }
-
-                    $u = $conn->execute_query("SELECT id FROM users WHERE uid = ? OR email = ? LIMIT 1", [$account['id'], $account['email']])->fetch_assoc();
-                    $userId = $u ? (int)$u['id'] : 0;
-                    if (!$userId) {
-                        $conn->execute_query("INSERT INTO users (uid, username, name, email, role, account_type, avatar, created_at) VALUES (?, ?, ?, ?, 'student', 'student', ?, NOW())", [$account['id'], $account['name'], $account['name'], $account['email'], $account['avatar']]);
-                        $userId = (int)$conn->insert_id;
-                    }
-
-                    $_SESSION['user_id'] = $userId;
-                    $_SESSION['account_id'] = $account['id'];
-                    $_SESSION['account_type'] = 'student';
-                    $_SESSION['user_role'] = 'student';
-                    $_SESSION['user_name'] = $account['name'];
-
-                    header("Location: index.php");
-                    exit;
+                    login_user_session($account, 'student', $conn);
                 } else {
                     $error = 'Invalid password. Please check your credentials.';
                 }
             } else {
-                // Strict Login Restriction Check
                 $inFaculty = table_exists('faculty', $conn) && $conn->execute_query("SELECT 1 FROM faculty WHERE email = ? LIMIT 1", [$login_input])->fetch_row();
                 $inAdmin   = $conn->execute_query("SELECT 1 FROM admins WHERE email = ? LIMIT 1", [$login_input])->fetch_row();
-
-                if ($inFaculty || $inAdmin) {
-                    $error = 'Invalid email or account type. This account is not authorized to access this portal.';
-                } else {
-                    $error = 'No student account found with that email address.';
-                }
+                $error = ($inFaculty || $inAdmin)
+                    ? 'Invalid email or account type. This account is not authorized to access this portal.'
+                    : 'No student account found with that email address.';
             }
         } elseif ($login_role === 'faculty') {
-            // Authenticate against faculty table (supports 10-digit ID, Email, or Full Name)
             $account = table_exists('faculty', $conn) ? $conn->execute_query("SELECT * FROM faculty WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$login_input, $login_input, $login_input])->fetch_assoc() : null;
-
             if ($account) {
                 if (password_verify($password, $account['password'])) {
-                    $u = $conn->execute_query("SELECT id FROM users WHERE uid = ? OR email = ? LIMIT 1", [$account['id'], $account['email']])->fetch_assoc();
-                    $userId = $u ? (int)$u['id'] : 0;
-                    if (!$userId) {
-                        $conn->execute_query("INSERT INTO users (uid, username, name, email, role, account_type, avatar, created_at) VALUES (?, ?, ?, ?, 'faculty', 'faculty', ?, NOW())", [$account['id'], $account['name'], $account['name'], $account['email'], $account['avatar']]);
-                        $userId = (int)$conn->insert_id;
-                    }
-
-                    $_SESSION['user_id'] = $userId;
-                    $_SESSION['account_id'] = $account['id'];
-                    $_SESSION['account_type'] = 'faculty';
-                    $_SESSION['user_role'] = 'faculty';
-                    $_SESSION['user_name'] = $account['name'];
-
-                    header("Location: index.php");
-                    exit;
+                    login_user_session($account, 'faculty', $conn);
                 } else {
                     $error = 'Invalid password. Please check your credentials.';
                 }
             } else {
-                // Strict Login Restriction Check
                 $inStudent = $conn->execute_query("SELECT 1 FROM students WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$login_input, $login_input, $login_input])->fetch_row();
                 $inAdmin   = $conn->execute_query("SELECT 1 FROM admins WHERE id = ? OR email = ? OR name = ? LIMIT 1", [$login_input, $login_input, $login_input])->fetch_row();
-
-                if ($inStudent || $inAdmin) {
-                    $error = 'Invalid ID or account type. This account is not authorized to access this portal.';
-                } else {
-                    $error = 'No faculty account found with the provided identifier.';
-                }
+                $error = ($inStudent || $inAdmin)
+                    ? 'Invalid ID or account type. This account is not authorized to access this portal.'
+                    : 'No faculty account found with the provided identifier.';
             }
         } elseif ($login_role === 'admin') {
-            // Authenticate against admins table using registered email address and password
             $account = $conn->execute_query("SELECT * FROM admins WHERE email = ? LIMIT 1", [$login_input])->fetch_assoc();
-
             if ($account) {
                 if (password_verify($password, $account['password'])) {
-                    $u = $conn->execute_query("SELECT id FROM users WHERE uid = ? OR email = ? LIMIT 1", [$account['id'], $account['email']])->fetch_assoc();
-                    $userId = $u ? (int)$u['id'] : 0;
-                    if (!$userId) {
-                        $conn->execute_query("INSERT INTO users (uid, username, name, email, role, account_type, avatar, created_at) VALUES (?, ?, ?, ?, 'admin', 'admin', ?, NOW())", [$account['id'], $account['name'], $account['name'], $account['email'], $account['avatar']]);
-                        $userId = (int)$conn->insert_id;
-                    }
-
-                    $_SESSION['user_id'] = $userId;
-                    $_SESSION['account_id'] = $account['id'];
-                    $_SESSION['account_type'] = 'admin';
-                    $_SESSION['user_role'] = 'admin';
-                    $_SESSION['user_name'] = $account['name'];
-
-                    header("Location: index.php?view=admin");
-                    exit;
+                    login_user_session($account, 'admin', $conn);
                 } else {
                     $error = 'Invalid password. Please check your credentials.';
                 }
             } else {
-                // Strict Login Restriction Check
                 $inStudent = $conn->execute_query("SELECT 1 FROM students WHERE email = ? LIMIT 1", [$login_input])->fetch_row();
                 $inFaculty = table_exists('faculty', $conn) && $conn->execute_query("SELECT 1 FROM faculty WHERE email = ? LIMIT 1", [$login_input])->fetch_row();
-
-                if ($inStudent || $inFaculty) {
-                    $error = 'Invalid email or account type. This account is not authorized to access this portal.';
-                } else {
-                    $error = 'No administrator account found with that email address.';
-                }
+                $error = ($inStudent || $inFaculty)
+                    ? 'Invalid email or account type. This account is not authorized to access this portal.'
+                    : 'No administrator account found with that email address.';
             }
         }
     }
@@ -421,6 +346,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
        4. CLIENT-SIDE INTERACTION SCRIPTS (Theme, Password Toggle, Modals)
        ========================================================================== -->
   <script>
+    function updateAuthThemeUI(theme) {
       document.documentElement.setAttribute('data-theme', theme);
       const icon = document.getElementById('auth-theme-icon');
       const text = document.getElementById('auth-theme-text');

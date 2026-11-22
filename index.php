@@ -25,15 +25,7 @@ if (!empty($_SESSION['user_id'])) {
 }
 
 $currentUserId = $currentUser ? (int)$currentUser['id'] : 0;
-function time_ago(?string $datetime): string {
-    if (!$datetime) return 'just now';
-    $d = time() - strtotime($datetime);
-    if ($d < 60) return 'just now';
-    if ($d < 3600) return floor($d / 60) . 'm ago';
-    if ($d < 86400) return floor($d / 3600) . 'h ago';
-    if ($d < 604800) return floor($d / 86400) . 'd ago';
-    return date('M j, Y', strtotime($datetime));
-}
+
 /* ==========================================================================
    SECTION 2: IMAGE UPLOAD & FORMATTING TOOLBAR HELPERS
    Handles multipart image attachments and generates rich-text formatting buttons.
