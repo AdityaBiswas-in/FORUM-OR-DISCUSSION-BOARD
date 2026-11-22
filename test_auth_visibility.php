@@ -1,4 +1,10 @@
 <?php
+/* ==========================================================================
+   QUADDIT PLATFORM - AUTOMATED AUTHENTICATION & ACCESS CONTROL TEST SUITE
+   File: test_auth_visibility.php
+   Purpose: Verifies student/faculty/admin login flows, role boundaries,
+            group privacy permissions, and profile visibility restrictions.
+   ========================================================================== */
 require_once __DIR__ . '/db.php';
 
 $baseUrl = 'http://localhost/FORUM-OR-DISCUSSION-BOARD';

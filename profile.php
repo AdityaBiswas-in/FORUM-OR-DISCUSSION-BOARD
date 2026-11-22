@@ -6,30 +6,28 @@
             discussions, user replies, joined communities, and edit profile modal.
    ========================================================================== */
 
-/* ==========================================================================
-   SECTION 1: AUTHENTICATION & TARGET USER RESOLUTION
-   Resolves current logged-in user and targets profile user by ID or username.
-   ========================================================================== */
+// ==========================================================================
+// 1. AUTHENTICATION & TARGET USER RESOLUTION
+// ==========================================================================
 require_once __DIR__ . '/db.php';
 
 $currentUser = null;
 if (!empty($_SESSION['user_id'])) {
-    $currentUser = $conn->execute_query("SELECT id, uid, username, account_type, email, name, avatar, role, bio, banner_url, created_at FROM users WHERE id = ?", [$_SESSION['user_id']])->fetch_assoc();
+    $currentUser = $conn->execute_query(
+        "SELECT id, uid, username, account_type, email, name, avatar, role, bio, banner_url, created_at FROM users WHERE id = ?",
+        [$_SESSION['user_id']]
+    )->fetch_assoc();
     if (!$currentUser) {
         unset($_SESSION['user_id'], $_SESSION['user_role'], $_SESSION['account_type'], $_SESSION['account_id']);
     }
 }
 $currentUserId = $currentUser ? (int)$currentUser['id'] : 0;
 
-// Target User Resolution
-
-$targetId = (int)($_GET['id'] ?? 0);
-
-$targetUid = trim($_GET['uid'] ?? '');
-
+// Resolve target profile user by ID, UID, or username
+$targetId       = (int)($_GET['id'] ?? 0);
+$targetUid      = trim($_GET['uid'] ?? '');
 $targetUsername = trim($_GET['u'] ?? '');
-
-$profileUser = null;
+$profileUser    = null;
 
 if ($targetId > 0) {
     $profileUser = $conn->execute_query("SELECT * FROM users WHERE id = ?", [$targetId])->fetch_assoc();
@@ -39,6 +37,7 @@ if ($targetId > 0) {
     $profileUser = $conn->execute_query("SELECT * FROM users WHERE username = ? OR uid = ?", [$targetUsername, $targetUsername])->fetch_assoc();
 }
 
+// Fallback to current logged-in user or redirect to registration
 if (!$profileUser) {
     if ($currentUser) {
         $profileUser = $currentUser;
@@ -56,34 +55,25 @@ if ($profileRole === 'admin' && !is_admin()) {
 }
 
 $isOwnProfile = ($currentUser && (int)$currentUser['id'] === (int)$profileUser['id']);
+$profileId    = (int)$profileUser['id'];
+$errorMsg     = '';
+$successMsg   = !empty($_GET['updated']) ? 'Profile updated successfully!' : '';
 
-$profileId = (int)$profileUser['id'];
-
-$errorMsg = '';
-
-$successMsg = !empty($_GET['updated']) ? 'Profile updated successfully!' : '';
-
-/* ==========================================================================
-   SECTION 2: PROFILE UPDATE CONTROLLER ACTION
-   Processes avatar uploads, profile banner uploads, bio changes, and name edits.
-   ========================================================================== */
-// Update Profile Action
-
+// ==========================================================================
+// 2. PROFILE UPDATE CONTROLLER ACTION (POST)
+// Processes avatar uploads, header banner uploads, bio changes, and name edits.
+// ==========================================================================
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'update_profile') {
     if (!$currentUser) {
         header("Location: register.php");
-
         exit;
     }
-
     if (!$isOwnProfile) {
         header("Location: profile.php?id=$profileId");
-
         exit;
     }
 
     $name = trim($_POST['name'] ?? '');
-
     $bio  = trim($_POST['bio'] ?? '');
 
     if ($name === '') {
@@ -92,71 +82,53 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') ==
         $toBase64 = function(?array $file): ?string {
             if (!empty($file) && ($file['error'] ?? 1) === UPLOAD_ERR_OK) {
                 $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-
                 if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
                     $mime = mime_content_type($file['tmp_name']) ?: "image/$ext";
-
                     return 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($file['tmp_name']));
                 }
             }
-
             return null;
         };
 
         $newAvatar = $toBase64($_FILES['avatar'] ?? null);
-
         $newBanner = $toBase64($_FILES['banner'] ?? null);
 
         $updateSql = "UPDATE users SET name = ?, bio = ?";
-
-        $params = [$name, $bio];
+        $params    = [$name, $bio];
 
         if ($newAvatar !== null) {
             $updateSql .= ", avatar = ?";
-
             $params[] = $newAvatar;
         }
-
         if ($newBanner !== null) {
             $updateSql .= ", banner_url = ?";
-
             $params[] = $newBanner;
         }
 
         $updateSql .= " WHERE id = ?";
-
         $params[] = $profileId;
 
         $conn->execute_query($updateSql, $params);
-
         header("Location: profile.php?id=$profileId&updated=1");
-
         exit;
     }
 }
 
-/* ==========================================================================
-   SECTION 3: PROFILE METRICS & ACTIVITY TAB DATA
-   Calculates total posts, replies, joined groups, and queries active tab feed.
-   ========================================================================== */
-// Counts & Tab Data
-
-$postCount  = (int)($conn->query("SELECT COUNT(*) FROM posts WHERE user_id = $profileId")->fetch_row()[0] ?? 0);
-
-$replyCount = (int)($conn->query("SELECT COUNT(*) FROM replies WHERE user_id = $profileId")->fetch_row()[0] ?? 0);
-
-$groupCount = (int)($conn->query("SELECT COUNT(*) FROM group_members WHERE user_id = $profileId")->fetch_row()[0] ?? 0);
-
-$tab        = in_array($_GET['tab'] ?? '', ['posts', 'replies', 'groups']) ? $_GET['tab'] : 'posts';
+// ==========================================================================
+// 3. PROFILE METRICS & TAB ACTIVITY DATA
+// Calculates total posts, replies, joined communities, and loads the active tab.
+// ==========================================================================
+$postCount   = (int)($conn->query("SELECT COUNT(*) FROM posts WHERE user_id = $profileId")->fetch_row()[0] ?? 0);
+$replyCount  = (int)($conn->query("SELECT COUNT(*) FROM replies WHERE user_id = $profileId")->fetch_row()[0] ?? 0);
+$groupCount  = (int)($conn->query("SELECT COUNT(*) FROM group_members WHERE user_id = $profileId")->fetch_row()[0] ?? 0);
+$tab         = in_array($_GET['tab'] ?? '', ['posts', 'replies', 'groups']) ? $_GET['tab'] : 'posts';
 
 $userPosts   = [];
-
 $postImages  = [];
-
 $userReplies = [];
-
 $userGroups  = [];
 
+// 3A. User Discussions Tab
 if ($tab === 'posts') {
     $profilePostSql = "
         SELECT p.*, g.name as group_name, g.image_url as group_image, g.status as group_status,
@@ -180,88 +152,52 @@ if ($tab === 'posts') {
     $userPosts = $conn->execute_query($profilePostSql, $profilePostParams)->fetch_all(MYSQLI_ASSOC);
 
     $p_ids = array_column($userPosts, 'id');
-
     if (!empty($p_ids)) {
         $in = implode(',', array_fill(0, count($p_ids), '?'));
-
         $imgResult = $conn->execute_query("SELECT post_id, image_url FROM post_images WHERE post_id IN ($in) ORDER BY id ASC", $p_ids);
-
         while ($row = $imgResult->fetch_assoc()) {
             $postImages[$row['post_id']][] = $row['image_url'];
         }
     }
+
+// 3B. User Replies Tab (Includes original thread context & nested reply)
 } elseif ($tab === 'replies') {
     $userReplies = $conn->execute_query("
-
         SELECT r.*,
-
                p.title as post_title, p.id as post_id, p.content as post_content, p.created_at as post_created_at,
-
                pu.id as post_author_id, pu.name as post_author_name, pu.username as post_author_username, pu.avatar as post_author_avatar,
-
                u.name as author_name, u.username as author_username, u.avatar as author_avatar
-
         FROM replies r
-
         JOIN posts p ON r.post_id = p.id
-
         JOIN users pu ON p.user_id = pu.id
-
         JOIN users u ON r.user_id = u.id
-
         WHERE r.user_id = ?
-
         ORDER BY r.created_at DESC
-
     ", [$profileId])->fetch_all(MYSQLI_ASSOC);
+
+// 3C. Joined Communities Tab
 } elseif ($tab === 'groups') {
     $userGroups = $conn->execute_query("
-
         SELECT g.*,
-
                (SELECT COUNT(*) FROM group_members gm2 WHERE gm2.group_id = g.id) as member_count,
-
                (SELECT COUNT(*) FROM posts p WHERE p.group_id = g.id) as post_count,
-
                (SELECT 1 FROM group_members gm3 WHERE gm3.group_id = g.id AND gm3.user_id = ?) as is_member
-
         FROM groups g
-
         JOIN group_members gm ON g.id = gm.group_id
-
         WHERE gm.user_id = ?
-
         ORDER BY gm.joined_at DESC
-
     ", [$currentUserId, $profileId])->fetch_all(MYSQLI_ASSOC);
 }
 
+// 3D. Sidebar Recent Discussions (Top 5)
 $recentDiscussions = $conn->query("
-
     SELECT p.id, p.title, p.created_at, u.name, u.avatar,
-
            (SELECT COUNT(*) FROM replies r WHERE r.post_id = p.id) as reply_count
-
     FROM posts p
-
     JOIN users u ON p.user_id = u.id
-
     ORDER BY p.created_at DESC LIMIT 5
-
 ")->fetch_all(MYSQLI_ASSOC);
-
 ?>
-
-<!-- ========================================
-
-HTML PART
-
-======================================== -->
-
-<!-- ==========================================================================
-     SECTION 4: PROFILE INTERFACE & LAYOUT TEMPLATE
-     Displays user banner, avatar, badges, profile bio, activity tabs, and posts.
-     ========================================================================== -->
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
@@ -272,27 +208,21 @@ HTML PART
   <link rel="shortcut icon" href="assets/images/favicon.ico?v=7">
   <link rel="stylesheet" href="assets/css/style.css?v=<?= filemtime(__DIR__ . '/assets/css/style.css') ?>">
   <script>
-
     (function() {
       const savedTheme = localStorage.getItem('campus_theme') || 'dark';
-
       document.documentElement.setAttribute('data-theme', savedTheme);
     })();
-
   </script>
 </head>
 <body>
 <?php require_once __DIR__ . '/includes/mobile-nav.php'; ?>
+
 <div class="app-container">
-
-  <!-- ======================================================== -->
-
-  <!-- LEFT SIDEBAR                                             -->
-
-  <!-- ======================================================== -->
+  <!-- ========================================================================
+       SECTION 4: LEFT SIDEBAR NAVIGATION
+       ======================================================================== -->
   <aside class="sidebar-left">
     <div>
-
       <!-- Brand Logo -->
       <a href="index.php" class="brand-header">
         <div class="brand-logo-icon">
@@ -410,16 +340,12 @@ HTML PART
         </div>
         <a href="profile.php" style="color: var(--text-main); display: flex; align-items: center; gap: 8px;">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-
           View Profile
-
         </a>
         <?php if (function_exists('is_admin') && is_admin()): ?>
         <a href="index.php?view=admin" style="color: var(--accent-orange, #f59e0b); display: flex; align-items: center; gap: 8px;">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-
           Admin Console
-
         </a>
         <?php endif; ?>
         <div class="divider"></div>
@@ -429,9 +355,7 @@ HTML PART
             <polyline points="16 17 21 12 16 7"></polyline>
             <line x1="21" y1="12" x2="9" y2="12"></line>
           </svg>
-
           Sign Out
-
         </a>
       </div>
     </div>
@@ -445,15 +369,11 @@ HTML PART
     <?php endif; ?>
   </aside>
 
-  <!-- ======================================================== -->
-
-  <!-- MAIN PROFILE COLUMN                                      -->
-
-  <!-- ======================================================== -->
+  <!-- ========================================================================
+       SECTION 5: MAIN PROFILE FEED COLUMN
+       ======================================================================== -->
   <main class="main-feed-column">
-
     <!-- Top Header Bar with Back Button -->
-
     <div class="profile-top-header">
       <a href="index.php" class="btn-profile-back" title="Back to discussions">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -461,7 +381,6 @@ HTML PART
           <polyline points="12 19 5 12 12 5"></polyline>
         </svg>
       </a>
-
       <div class="profile-header-titles">
         <h2><?= e($profileUser['name']) ?></h2>
         <span><?= $postCount ?> Discussions</span>
@@ -480,8 +399,7 @@ HTML PART
       </div>
     <?php endif; ?>
 
-    <!-- HERO BANNER -->
-
+    <!-- Profile Hero Banner -->
     <div class="profile-banner-hero">
       <?php if (!empty($profileUser['banner_url'])): ?>
         <img src="<?= e($profileUser['banner_url']) ?>" alt="Profile Banner" id="profile-banner-display">
@@ -490,18 +408,14 @@ HTML PART
       <?php endif; ?>
     </div>
 
-    <!-- PROFILE INFO SECTION -->
-
+    <!-- Profile Info (Avatar, Name, Verified Badge, Bio, Join Date) -->
     <div class="profile-info-section">
-
       <div class="profile-avatar-action-row">
         <img src="<?= e($profileUser['avatar']) ?>" alt="<?= e($profileUser['name']) ?>" class="profile-avatar-lg" id="profile-avatar-display">
         <?php if ($isOwnProfile): ?>
           <button type="button" class="btn-edit-profile-pill" onclick="openEditProfileModal()">Edit profile</button>
         <?php endif; ?>
       </div>
-
-      <!-- User Names & Badges -->
 
       <div class="profile-user-names">
         <h1 class="profile-display-name">
@@ -512,13 +426,9 @@ HTML PART
         </h1>
       </div>
 
-      <!-- Bio -->
       <?php if (!empty($profileUser['bio'])): ?>
-
         <div class="profile-bio-text"><?= nl2br(e($profileUser['bio'])) ?></div>
       <?php endif; ?>
-
-      <!-- Meta Information (Join Date) -->
 
       <div class="profile-meta-info">
         <span class="profile-meta-item">
@@ -533,8 +443,7 @@ HTML PART
       </div>
     </div>
 
-    <!-- TABS BAR (Posts, Replies, Groups) -->
-
+    <!-- Activity Tabs (Discussions, Replies, Communities) -->
     <div class="profile-tabs-bar">
       <a href="profile.php?id=<?= $profileId ?>&tab=posts" class="profile-tab-item <?= $tab === 'posts' ? 'active' : '' ?>">
         <span>Posts</span>
@@ -550,20 +459,15 @@ HTML PART
       </a>
     </div>
 
-    <!-- TAB CONTENT: POSTS -->
+    <!-- TAB 1: DISCUSSIONS FEED -->
     <?php if ($tab === 'posts'): ?>
-
       <div class="profile-feed-list">
         <?php if (!empty($userPosts)): ?>
           <?php foreach ($userPosts as $post): ?>
             <?php
-
               $pId = (int)$post['id'];
-
               $images = $postImages[$pId] ?? [];
-
               $imgCount = count($images);
-
             ?>
             <article class="post-card post-card-reddit" onclick="handleProfileCardClick(event, 'index.php?post=<?= $pId ?>')" style="cursor: pointer;">
               <div class="post-main-col">
@@ -635,33 +539,23 @@ HTML PART
       </div>
     <?php endif; ?>
 
-    <!-- TAB CONTENT: REPLIES -->
+    <!-- TAB 2: REPLIES FEED (Thread Context + Reply Card) -->
     <?php if ($tab === 'replies'): ?>
-
       <div class="profile-feed-list">
         <?php if (!empty($userReplies)): ?>
           <?php foreach ($userReplies as $rep): ?>
             <?php
-
-              $pId = (int)$rep['post_id'];
-
+              $pId   = (int)$rep['post_id'];
               $repId = (int)$rep['id'];
-
             ?>
-
             <div class="profile-reply-thread-group" onclick="handleProfileCardClick(event, 'index.php?post=<?= $pId ?>#reply-<?= $repId ?>')" style="cursor: pointer; border-bottom: 1px solid var(--border-color); padding: 14px 16px; transition: background-color 0.15s ease;">
-
               <!-- 1. The Original Post Parent -->
-
               <div class="profile-parent-post-row" style="display: flex; gap: 12px; position: relative;">
-
                 <div class="profile-thread-avatar-col" style="display: flex; flex-direction: column; align-items: center;">
                   <a href="profile.php?id=<?= (int)$rep['post_author_id'] ?>" onclick="event.stopPropagation()">
                     <img src="<?= e($rep['post_author_avatar']) ?>" alt="<?= e($rep['post_author_name']) ?>" class="author-avatar" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover;">
                   </a>
-
                   <!-- Vertical connecting thread line -->
-
                   <div class="profile-thread-line" style="width: 2px; flex: 1; min-height: 24px; background-color: var(--border-color); margin: 6px 0;"></div>
                 </div>
 
@@ -679,13 +573,9 @@ HTML PART
                       <span class="post-timestamp" style="color: var(--text-muted); font-size: 14px;"><?= time_ago($rep['post_created_at']) ?></span>
                     </div>
                   </div>
-
-                  <!-- Post Title -->
                   <div style="font-weight: 700; font-size: 14.5px; color: var(--text-main); margin: 2px 0 4px 0;">
                     <?= e($rep['post_title']) ?>
                   </div>
-
-                  <!-- Post snippet -->
                   <div style="font-size: 13.5px; color: var(--text-muted); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
                     <?= e($rep['post_content']) ?>
                   </div>
@@ -693,9 +583,7 @@ HTML PART
               </div>
 
               <!-- 2. The User's Reply directly below -->
-
               <div class="profile-reply-row" style="display: flex; gap: 12px; margin-top: 2px;">
-
                 <div class="profile-reply-avatar-col" style="flex-shrink: 0;">
                   <a href="profile.php?id=<?= $profileId ?>" onclick="event.stopPropagation()">
                     <img src="<?= e($profileUser['avatar']) ?>" alt="<?= e($profileUser['name']) ?>" class="author-avatar" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover;">
@@ -714,19 +602,12 @@ HTML PART
                       <span style="font-size: 11.5px; color: var(--text-dim);">(edited)</span>
                     <?php endif; ?>
                   </div>
-
-                  <!-- Subtitle tag -->
                   <div style="font-size: 12px; color: var(--text-dim); margin-bottom: 4px;">
-
                     Replying to <span style="color: var(--primary-blue); font-weight: 600;">@<?= e($rep['post_author_username']) ?></span>
                   </div>
-
-                  <!-- Reply text content -->
                   <div class="reply-body-text" style="font-size: 14.5px; color: var(--text-main); line-height: 1.45; word-break: break-word;">
                     <?= format_post_content($rep['content']) ?>
                   </div>
-
-                  <!-- Reply Image Attachment if present -->
                   <?php if (!empty($rep['image_url'])): ?>
                     <div style="max-width: 320px; border-radius: 12px; overflow: hidden; margin-top: 8px; border: 1px solid var(--border-color);" onclick="event.stopPropagation(); openLightbox('<?= e($rep['image_url']) ?>')">
                       <img src="<?= e($rep['image_url']) ?>" alt="Reply photo" style="width: 100%; height: auto; display: block;">
@@ -745,18 +626,15 @@ HTML PART
       </div>
     <?php endif; ?>
 
-    <!-- TAB CONTENT: GROUPS -->
+    <!-- TAB 3: JOINED COMMUNITIES -->
     <?php if ($tab === 'groups'): ?>
       <div style="padding: 16px;">
         <?php if (!empty($userGroups)): ?>
           <div class="groups-grid profile-groups-list" style="grid-template-columns: 1fr;">
             <?php foreach ($userGroups as $g): ?>
               <?php
-
                 $isMember = !empty($g['is_member']);
-
                 $isRestricted = ($g['status'] === 'restricted');
-
               ?>
               <div class="group-card">
                 <div>
@@ -765,9 +643,7 @@ HTML PART
                       <?php if (!empty($g['image_url'])): ?>
                         <img src="<?= e($g['image_url']) ?>" alt="<?= e($g['name']) ?>" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">
                       <?php else: ?>
-
                         👥
-
                       <?php endif; ?>
                     </div>
                     <div style="flex: 1; min-width: 0;">
@@ -834,11 +710,9 @@ HTML PART
     <?php endif; ?>
   </main>
 
-  <!-- ======================================================== -->
-
-  <!-- RIGHT SIDEBAR                                            -->
-
-  <!-- ======================================================== -->
+  <!-- ========================================================================
+       SECTION 6: RIGHT SIDEBAR (Recent Discussions)
+       ======================================================================== -->
   <aside class="sidebar-right">
     <div class="recent-discussions-card">
       <h3 class="recent-card-header">Recent Discussions</h3>
@@ -870,15 +744,9 @@ HTML PART
   </aside>
 </div>
 
-<!-- ======================================================== -->
-
 <!-- ==========================================================================
-     SECTION 5: EDIT PROFILE MODAL DIALOG
-     Popup form allowing users to update their avatar, cover banner, and bio.
+     SECTION 7: EDIT PROFILE MODAL DIALOG
      ========================================================================== -->
-<!-- Edit Profile Modal -->
-
-<!-- ======================================================== -->
 <?php if ($isOwnProfile): ?>
 <div class="modal-overlay" id="edit-profile-modal">
   <div class="modal-dialog" style="max-width: 560px;">
@@ -889,7 +757,6 @@ HTML PART
     <form action="profile.php?id=<?= $profileId ?>" method="POST" enctype="multipart/form-data" id="edit-profile-form">
       <input type="hidden" name="action" value="update_profile">
       <div class="modal-body" style="padding: 16px 20px;">
-
         <!-- Banner Upload Field & Preview -->
         <div class="form-group">
           <label class="form-label" style="display: flex; justify-content: space-between;">
@@ -901,9 +768,7 @@ HTML PART
             <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center;">
               <button type="button" onclick="document.getElementById('input-banner-file').click()" style="padding: 8px 16px; border-radius: 9999px; background: rgba(0,0,0,0.7); color: #fff; border: 1px solid rgba(255,255,255,0.4); font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px;">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
-
                 Change Banner
-
               </button>
             </div>
             <input type="file" name="banner" id="input-banner-file" accept="image/*" style="display: none;" onchange="handleModalBannerPreview(this)">
@@ -919,9 +784,7 @@ HTML PART
             </div>
             <div>
               <button type="button" onclick="document.getElementById('input-avatar-file').click()" style="padding: 7px 16px; border-radius: 9999px; background: rgba(255,255,255,0.08); color: var(--text-main); border: 1px solid var(--border-color); font-size: 13px; font-weight: 700; cursor: pointer;">
-
                 Upload Photo
-
               </button>
               <input type="file" name="avatar" id="input-avatar-file" accept="image/*" style="display: none;" onchange="handleModalAvatarPreview(this)">
               <div style="font-size: 11.5px; color: var(--text-dim); margin-top: 4px;">JPG, PNG, WEBP up to 5MB</div>
@@ -929,13 +792,13 @@ HTML PART
           </div>
         </div>
 
-        <!-- Display Name -->
+        <!-- Display Name Input -->
         <div class="form-group" style="margin-top: 14px;">
           <label class="form-label" for="edit-profile-name">Display Name</label>
           <input type="text" name="name" id="edit-profile-name" class="form-input" value="<?= e($profileUser['name']) ?>" required maxlength="60">
         </div>
 
-        <!-- Bio -->
+        <!-- Bio Input -->
         <div class="form-group" style="margin-top: 14px;">
           <label class="form-label" for="edit-profile-bio">Bio</label>
           <textarea name="bio" id="edit-profile-bio" class="form-textarea" style="min-height: 80px;" maxlength="255" placeholder="Tell the campus about yourself..."><?= e($profileUser['bio']) ?></textarea>
@@ -951,109 +814,84 @@ HTML PART
 </div>
 <?php endif; ?>
 
-<!-- FULL IMAGE LIGHTBOX PREVIEW -->
+<!-- ==========================================================================
+     SECTION 8: FULL IMAGE LIGHTBOX VIEWER
+     ========================================================================== -->
 <div class="lightbox-overlay" id="lightbox-overlay" onclick="closeLightbox(event)">
   <button class="lightbox-close" onclick="closeLightbox(event)">✕</button>
   <img src="" alt="Enlarged view" id="lightbox-img" class="lightbox-img" onclick="event.stopPropagation()">
 </div>
+
+<!-- ==========================================================================
+     SECTION 9: CLIENT-SIDE JAVASCRIPT CONTROLLERS
+     ========================================================================== -->
 <script>
-
-/* ==========================================================================
-   SECTION 6: CLIENT-SIDE PROFILE SCRIPTS & IMAGE PREVIEWERS
-   Handles theme switching, edit modal triggers, live image previews, and bio counter.
-   ========================================================================== */
-// Theme Management
-
+// 1. Theme Management
 function initTheme() {
   const saved = localStorage.getItem('campus_theme') || 'dark';
-
   document.documentElement.setAttribute('data-theme', saved);
-
   updateThemeIcon(saved);
 }
 
 function toggleTheme() {
   const current = document.documentElement.getAttribute('data-theme') || 'dark';
-
   const next = current === 'dark' ? 'light' : 'dark';
-
   document.documentElement.setAttribute('data-theme', next);
-
   localStorage.setItem('campus_theme', next);
-
   updateThemeIcon(next);
 }
 
 function updateThemeIcon(theme) {
   const sun = document.querySelector('.theme-icon-sun');
-
   const moon = document.querySelector('.theme-icon-moon');
-
   const label = document.getElementById('theme-label-text');
 
   if (theme === 'light') {
     if (sun) sun.style.display = 'block';
-
     if (moon) moon.style.display = 'none';
-
     if (label) label.textContent = 'Theme: Light';
   } else {
     if (sun) sun.style.display = 'none';
-
     if (moon) moon.style.display = 'block';
-
     if (label) label.textContent = 'Theme: Dark';
   }
 }
-
 initTheme();
 
-// Profile Dropdown
-
+// 2. Profile Dropdown Menu Toggle
 function toggleProfileDropdown(e) {
   e.stopPropagation();
-
   const menu = document.getElementById('profile-dropdown-menu');
-
   if (menu) menu.classList.toggle('active');
 }
 
 document.addEventListener('click', () => {
   const menu = document.getElementById('profile-dropdown-menu');
-
   if (menu) menu.classList.remove('active');
 });
 
-// Edit Profile Modal
-
+// 3. Edit Profile Modal Dialog
 function openEditProfileModal() {
   const modal = document.getElementById('edit-profile-modal');
-
   if (modal) modal.classList.add('active');
 }
 
 function closeEditProfileModal() {
   const modal = document.getElementById('edit-profile-modal');
-
   if (modal) modal.classList.remove('active');
 }
 
-// Live Image Previews in Edit Modal
-
+// 4. Live Image Upload Previews
 function handleModalBannerPreview(input) {
   if (input.files && input.files[0]) {
     const reader = new window.FileReader();
-
     reader.onload = function(e) {
       const img = document.getElementById('preview-modal-banner');
-
       if (img) {
         img.src = e.target.result;
-
         img.style.display = 'block';
       }
     };
-
     reader.readAsDataURL(input.files[0]);
   }
 }
@@ -1061,65 +899,47 @@ function handleModalBannerPreview(input) {
 function handleModalAvatarPreview(input) {
   if (input.files && input.files[0]) {
     const reader = new window.FileReader();
-
     reader.onload = function(e) {
       const img = document.getElementById('preview-modal-avatar');
-
       if (img) img.src = e.target.result;
     };
-
     reader.readAsDataURL(input.files[0]);
   }
 }
 
-// Bio Character Counter
-
+// 5. Bio Character Counter
 const bioTextarea = document.getElementById('edit-profile-bio');
-
 const bioCharCount = document.getElementById('bio-char-count');
-
 if (bioTextarea && bioCharCount) {
   bioTextarea.addEventListener('input', function() {
     const remaining = 255 - this.value.length;
-
     bioCharCount.textContent = remaining + ' chars remaining';
   });
 }
 
-// Allow text selection & copying without triggering card navigation
+// 6. Safe Card Click Handler (allows text selection without opening link)
 function handleProfileCardClick(event, url) {
   const selection = window.getSelection ? window.getSelection() : null;
-  if (selection && selection.toString().length > 0) {
-    return;
-  }
-  if (event.target && event.target.closest('button, a, input, textarea, label')) {
-    return;
-  }
+  if (selection && selection.toString().length > 0) return;
+  if (event.target && event.target.closest('button, a, input, textarea, label')) return;
   window.location.href = url;
 }
 
-// Lightbox
-
+// 7. Lightbox Previewer
 function openLightbox(url) {
   const overlay = document.getElementById('lightbox-overlay');
-
   const img = document.getElementById('lightbox-img');
-
   if (overlay && img) {
     img.src = url;
-
     overlay.classList.add('active');
   }
 }
 
 function closeLightbox(e) {
   if (e) e.stopPropagation();
-
   const overlay = document.getElementById('lightbox-overlay');
-
   if (overlay) overlay.classList.remove('active');
 }
-
 </script>
 </body>
 </html>

@@ -1211,28 +1211,19 @@ if ($single_notice_id > 0) {
     }
 }
 
-// Get current user's joined active groups for post composer dropdown
-
-$userJoinedGroupIds = [];
-
-$gmStmt = $conn->execute_query("SELECT group_id FROM group_members WHERE user_id = ?", [$currentUserId]);
-
-while ($grow = $gmStmt->fetch_assoc()) {
-    $userJoinedGroupIds[] = (int)$grow['group_id'];
-}
-
+// User's joined active communities for post composer dropdown
 $userJoinedGroups = [];
-
-if (!empty($userJoinedGroupIds)) {
-    $placeholders = implode(',', array_fill(0, count($userJoinedGroupIds), '?'));
-
-    $userJoinedGroups = $conn->execute_query(
-
-        "SELECT id, name, description, status, image_url, (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = groups.id) as member_count FROM groups WHERE id IN ($placeholders) AND status IN ('active', 'public', 'private') ORDER BY name ASC",
-
-        $userJoinedGroupIds
-
-    )->fetch_all(MYSQLI_ASSOC);
+$userJoinedGroupIds = [];
+if ($currentUserId > 0) {
+    $userJoinedGroups = $conn->execute_query("
+        SELECT g.id, g.name, g.description, g.status, g.image_url,
+               (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id) as member_count
+        FROM groups g
+        JOIN group_members gm ON g.id = gm.group_id
+        WHERE gm.user_id = ? AND g.status IN ('active', 'public', 'private')
+        ORDER BY g.name ASC
+    ", [$currentUserId])->fetch_all(MYSQLI_ASSOC);
+    $userJoinedGroupIds = array_map('intval', array_column($userJoinedGroups, 'id'));
 }
 
 // If viewing a specific group
@@ -1328,118 +1319,71 @@ if ($current_view === 'admin') {
     }
 
     $adminGroups = $conn->query("
-
         SELECT g.*, u.name as creator_name,
-
                (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id) as member_count,
-
                (SELECT COUNT(*) FROM posts p WHERE p.group_id = g.id) as post_count
-
         FROM groups g
-
         LEFT JOIN users u ON g.created_by = u.id
-
         ORDER BY g.created_at DESC
-
     ")->fetch_all(MYSQLI_ASSOC);
 
     $adminRecentPosts = $conn->query("
-
         SELECT p.id, p.title, p.created_at, p.group_id, g.name as group_name, u.name as author_name, u.username as author_username,
-
                (SELECT COUNT(*) FROM replies r WHERE r.post_id = p.id) as reply_count
-
         FROM posts p
-
         JOIN groups g ON p.group_id = g.id
-
         JOIN users u ON p.user_id = u.id
-
         ORDER BY p.created_at DESC
-
         LIMIT 500
-
     ")->fetch_all(MYSQLI_ASSOC);
 
-    $stats['total_groups'] = (int)$conn->query("SELECT COUNT(*) FROM groups")->fetch_row()[0];
-
-    $stats['active_groups'] = (int)$conn->query("SELECT COUNT(*) FROM groups WHERE status != 'restricted'")->fetch_row()[0];
-
-    $stats['total_posts'] = (int)$conn->query("SELECT COUNT(*) FROM posts")->fetch_row()[0];
-
-    $stats['total_users'] = (int)$conn->query("SELECT COUNT(*) FROM users WHERE role != 'admin'")->fetch_row()[0];
-
+    $stats['total_groups']   = (int)$conn->query("SELECT COUNT(*) FROM groups")->fetch_row()[0];
+    $stats['active_groups']  = (int)$conn->query("SELECT COUNT(*) FROM groups WHERE status != 'restricted'")->fetch_row()[0];
+    $stats['total_posts']    = (int)$conn->query("SELECT COUNT(*) FROM posts")->fetch_row()[0];
+    $stats['total_users']    = (int)$conn->query("SELECT COUNT(*) FROM users WHERE role != 'admin'")->fetch_row()[0];
     $stats['total_students'] = $stats['total_users'];
 }
 
 // If viewing Groups Directory
-
 $allGroups = [];
-
 if ($current_view === 'groups') {
     $gSql = "
-
         SELECT g.*,
-
                (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id) as member_count,
-
                (SELECT COUNT(*) FROM posts p WHERE p.group_id = g.id) as post_count,
-
                (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id AND gm.user_id = ?) as is_member
-
         FROM groups g
-
     ";
-
     $gParams = [$currentUserId];
-
     if ($search_query !== '') {
         $gSql .= " WHERE (g.name LIKE ? OR g.description LIKE ?)";
-
         $gParams[] = "%$search_query%";
-
         $gParams[] = "%$search_query%";
     }
-
     $gSql .= " ORDER BY g.status ASC, member_count DESC, g.name ASC";
-
     $allGroups = $conn->execute_query($gSql, $gParams)->fetch_all(MYSQLI_ASSOC);
 }
 
 // Fetch Feed Posts (Home Feed or Group Feed)
-
 $posts = [];
-
 $postImages     = [];
-
 $postImagesData = [];
-
 $repliesByPost  = [];
 
 if ($current_view !== 'admin' && $current_view !== 'groups' && $current_view !== 'announcements') {
     $sql = "
-
         SELECT p.*, g.name as group_name, g.image_url as group_image, g.status as group_status,
-
                u.name as author_name, u.username as author_username, u.avatar as author_avatar, u.role as author_role,
-
                (SELECT COUNT(*) FROM replies r WHERE r.post_id = p.id) as reply_count
-
         FROM posts p
-
         JOIN groups g ON p.group_id = g.id
-
         JOIN users u ON p.user_id = u.id
-
     ";
-
     $params = [];
 
     if ($single_post_id > 0) {
         $conn->execute_query("UPDATE posts SET views = views + 1 WHERE id = ?", [$single_post_id]);
-
         $sql .= " WHERE p.id = ?";
-
         $params[] = $single_post_id;
     } elseif ($selected_group_id > 0) {
         if ($isGroupPrivate && !$canViewPrivateGroup) {
@@ -1467,19 +1411,12 @@ if ($current_view !== 'admin' && $current_view !== 'groups' && $current_view !==
 
         if ($search_query !== '') {
             $sql .= " AND (p.title LIKE ? OR p.content LIKE ?)";
-
             $params[] = "%$search_query%";
-
             $params[] = "%$search_query%";
         }
     }
 
-    if ($selected_group_id > 0) {
-        $sql .= " ORDER BY p.is_pinned DESC, p.created_at DESC";
-    } else {
-        $sql .= " ORDER BY p.created_at DESC";
-    }
-
+    $sql .= ($selected_group_id > 0) ? " ORDER BY p.is_pinned DESC, p.created_at DESC" : " ORDER BY p.created_at DESC";
     $posts = $conn->execute_query($sql, $params)->fetch_all(MYSQLI_ASSOC);
 
     // If viewing single post directly, verify private group access
@@ -1495,30 +1432,20 @@ if ($current_view !== 'admin' && $current_view !== 'groups' && $current_view !==
     }
 
     $post_ids = array_column($posts, 'id');
-
     if (!empty($post_ids)) {
         $placeholders = implode(',', array_fill(0, count($post_ids), '?'));
-
         $imgResult = $conn->execute_query("SELECT id, post_id, image_url FROM post_images WHERE post_id IN ($placeholders) ORDER BY id ASC", $post_ids);
-
         while ($row = $imgResult->fetch_assoc()) {
             $postImages[$row['post_id']][]     = $row['image_url'];
-
             $postImagesData[$row['post_id']][] = ['id' => (int)$row['id'], 'url' => $row['image_url']];
         }
 
         $repResult = $conn->execute_query("
-
             SELECT r.*, u.name as author_name, u.username as author_username, u.avatar as author_avatar, u.role as author_role
-
             FROM replies r
-
             JOIN users u ON r.user_id = u.id
-
             WHERE r.post_id IN ($placeholders)
-
             ORDER BY r.created_at DESC
-
         ", $post_ids);
 
         while ($row = $repResult->fetch_assoc()) {
