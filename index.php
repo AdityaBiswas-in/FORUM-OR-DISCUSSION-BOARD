@@ -2786,7 +2786,8 @@ HTML PART starts here
             <!-- Content Moderation Google-style Pagination -->
             <div class="admin-pagination-container" id="admin-posts-pagination">
               <div class="admin-pagination-info" id="admin-posts-pagination-info">
-                Showing <strong id="admin-posts-showing-start">1</strong>–<strong id="admin-posts-showing-end">15</strong> of <strong id="admin-posts-total-count"><?= count($adminRecentPosts ?? []) ?></strong> discussions
+                <span>Showing <strong id="admin-posts-showing-start">1</strong>–<strong id="admin-posts-showing-end"><?= min(15, count($adminRecentPosts ?? [])) ?></strong> of <strong id="admin-posts-total-count"><?= count($adminRecentPosts ?? []) ?></strong> discussions</span>
+                <span id="admin-posts-page-indicator" style="color: var(--text-dim); font-size: 12px; margin-left: 6px;">(Page <span id="admin-posts-current-page">1</span> of <span id="admin-posts-total-pages"><?= max(1, (int)ceil(count($adminRecentPosts ?? []) / 15)) ?></span>)</span>
               </div>
               <div class="admin-pagination-controls" id="admin-posts-pagination-controls" aria-label="Pagination Navigation">
                 <!-- Dynamically populated Google-style page buttons -->

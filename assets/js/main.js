@@ -831,19 +831,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const renderPaginationControls = (totalPages, currentPage) => {
       if (!adminPostsPaginationControls) return;
       adminPostsPaginationControls.innerHTML = '';
-
-      if (totalPages <= 1) {
-        adminPostsPaginationControls.style.display = 'none';
-        return;
-      }
       adminPostsPaginationControls.style.display = 'flex';
 
       // Previous button
       const prevBtn = document.createElement('button');
       prevBtn.type = 'button';
-      prevBtn.className = 'admin-page-btn' + (currentPage === 1 ? ' disabled' : '');
+      prevBtn.className = 'admin-page-btn' + (currentPage <= 1 ? ' disabled' : '');
       prevBtn.innerHTML = `&larr; Prev`;
-      prevBtn.disabled = (currentPage === 1);
+      prevBtn.disabled = (currentPage <= 1);
       prevBtn.setAttribute('aria-label', 'Previous page');
       prevBtn.addEventListener('click', () => {
         if (currentModerationPage > 1) {
@@ -856,7 +851,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Google-style window of page numbers
       const getPageList = () => {
         if (totalPages <= 7) {
-          return Array.from({ length: totalPages }, (_, i) => i + 1);
+          return Array.from({ length: Math.max(1, totalPages) }, (_, i) => i + 1);
         }
         if (currentPage <= 4) {
           return [1, 2, 3, 4, 5, '...', totalPages];
@@ -895,9 +890,9 @@ document.addEventListener('DOMContentLoaded', () => {
       // Next button
       const nextBtn = document.createElement('button');
       nextBtn.type = 'button';
-      nextBtn.className = 'admin-page-btn' + (currentPage === totalPages ? ' disabled' : '');
+      nextBtn.className = 'admin-page-btn' + (currentPage >= totalPages ? ' disabled' : '');
       nextBtn.innerHTML = `Next &rarr;`;
-      nextBtn.disabled = (currentPage === totalPages);
+      nextBtn.disabled = (currentPage >= totalPages);
       nextBtn.setAttribute('aria-label', 'Next page');
       nextBtn.addEventListener('click', () => {
         if (currentModerationPage < totalPages) {
@@ -1014,6 +1009,10 @@ document.addEventListener('DOMContentLoaded', () => {
           if (adminPostsShowingStart) adminPostsShowingStart.textContent = displayStart;
           if (adminPostsShowingEnd) adminPostsShowingEnd.textContent = displayEnd;
           if (adminPostsTotalCount) adminPostsTotalCount.textContent = totalMatching;
+          const curPageEl = document.getElementById('admin-posts-current-page');
+          const totalPagesEl = document.getElementById('admin-posts-total-pages');
+          if (curPageEl) curPageEl.textContent = currentModerationPage;
+          if (totalPagesEl) totalPagesEl.textContent = totalPages;
         }
       }
 

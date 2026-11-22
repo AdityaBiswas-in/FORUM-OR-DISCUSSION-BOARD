@@ -4028,7 +4028,7 @@ a.post-group-author-link:hover .author-name {
 }
 
 /* ======================================================== */
-/* Google-style Pagination for Admin Moderation             */
+/* Google-style Pagination Footer for Admin Moderation       */
 /* ======================================================== */
 .admin-pagination-container {
   display: flex;
@@ -4036,16 +4036,20 @@ a.post-group-author-link:hover .author-name {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 14px;
-  padding: 12px 18px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md, 12px);
+  margin: 0;
+  padding: 14px 20px;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border-color);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
 
 .admin-pagination-info {
   font-size: 13px;
   color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .admin-pagination-info strong {
@@ -4064,15 +4068,15 @@ a.post-group-author-link:hover .author-name {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 34px;
-  height: 34px;
-  padding: 0 11px;
-  font-size: 13px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--text-muted);
   background: var(--bg-input);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
   user-select: none;
   transition: all 0.15s ease;
@@ -4096,7 +4100,7 @@ a.post-group-author-link:hover .author-name {
 
 .admin-page-btn:disabled,
 .admin-page-btn.disabled {
-  opacity: 0.38;
+  opacity: 0.35;
   cursor: not-allowed;
   pointer-events: none;
 }
@@ -4105,10 +4109,10 @@ a.post-group-author-link:hover .author-name {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
-  height: 34px;
+  min-width: 26px;
+  height: 32px;
   color: var(--text-dim);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   user-select: none;
 }
