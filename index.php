@@ -1299,6 +1299,42 @@ if ($selected_group_id > 0) {
     }
 }
 
+// Announcements across all campus groups (when browsing view=announcements without specific group)
+if ($current_view === 'announcements' && $selected_group_id <= 0) {
+    $gnSql = "
+        SELECT gn.*, g.name as group_name, g.status as group_status, u.name as author_name, u.avatar as author_avatar, u.role as author_role
+        FROM group_notices gn
+        JOIN groups g ON gn.group_id = g.id
+        JOIN users u ON gn.user_id = u.id
+        WHERE (g.status != 'private' OR ? = 1 " . ($currentUser ? "OR gn.group_id IN (SELECT group_id FROM group_members WHERE user_id = ?)" : "") . ")
+    ";
+    $gnParams = [is_admin() ? 1 : 0];
+    if ($currentUser) {
+        $gnParams[] = (int)$currentUser['id'];
+    }
+    if (!empty($search_query)) {
+        $gnSql .= " AND (gn.headline LIKE ? OR gn.message LIKE ? OR g.name LIKE ?)";
+        $gnParams[] = "%$search_query%";
+        $gnParams[] = "%$search_query%";
+        $gnParams[] = "%$search_query%";
+    }
+    $gnSql .= " ORDER BY gn.created_at DESC LIMIT 50";
+    $groupNotices = $conn->execute_query($gnSql, $gnParams)->fetch_all(MYSQLI_ASSOC);
+}
+
+// Latest campus announcements for feed spotlight
+$latestCampusNotices = [];
+if (empty($current_view) && $selected_group_id <= 0 && $single_post_id <= 0 && empty($single_notice_id)) {
+    $lcnSql = "
+        SELECT gn.id, gn.group_id, gn.headline, gn.created_at, g.name as group_name
+        FROM group_notices gn
+        JOIN groups g ON gn.group_id = g.id
+        WHERE g.status != 'private' OR ? = 1
+        ORDER BY gn.created_at DESC LIMIT 3
+    ";
+    $latestCampusNotices = $conn->execute_query($lcnSql, [is_admin() ? 1 : 0])->fetch_all(MYSQLI_ASSOC);
+}
+
 // If viewing Admin Console
 
 $adminGroups = [];
@@ -1503,7 +1539,7 @@ $popularGroups = $conn->execute_query("
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?= !empty($currentNotice) ? e($currentNotice['headline']) . ' · Announcements · Quaddit' : ($current_view === 'announcements' && !empty($currentGroup) ? 'All Announcements · ' . e($currentGroup['name']) . ' · Quaddit' : 'Quaddit - College Discussion Board') ?></title>
+  <title><?= !empty($currentNotice) ? e($currentNotice['headline']) . ' · Announcements · Quaddit' : ($current_view === 'announcements' && !empty($currentGroup) ? 'All Announcements · ' . e($currentGroup['name']) . ' · Quaddit' : ($current_view === 'announcements' ? 'Campus Announcements · Quaddit' : 'Quaddit - College Discussion Board')) ?></title>
   <meta name="description" content="Quaddit is the modern discussion board for college students to share questions, images, setups, and campus moments.">
   <link rel="stylesheet" href="assets/css/style.css?v=<?= file_exists(__DIR__ . '/assets/css/style.css') ? filemtime(__DIR__ . '/assets/css/style.css') : time() ?>">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/images/logo-transparent.png?v=7">
@@ -1521,7 +1557,7 @@ $popularGroups = $conn->execute_query("
 <body>
 <?php require_once __DIR__ . '/includes/mobile-nav.php'; ?>
 <?php
-  $isAnnouncementSection = (!empty($currentNotice) || ($selected_group_id > 0 && $current_view === 'announcements'));
+  $isAnnouncementSection = (!empty($currentNotice) || $current_view === 'announcements');
 ?>
 <div class="app-container<?= $current_view === 'admin' ? ' app-admin-mode' : '' ?><?= $isAnnouncementSection ? ' app-no-left-sidebar' : '' ?>">
 
@@ -1551,12 +1587,22 @@ $popularGroups = $conn->execute_query("
             <span>Home</span>
           </a>
         </li>
-        <li class="nav-item <?= $current_view === 'groups' || $selected_group_id > 0 ? 'active' : '' ?>">
+        <li class="nav-item <?= ($current_view === 'groups' || $selected_group_id > 0) && $current_view !== 'announcements' ? 'active' : '' ?>">
           <a href="index.php?view=groups" id="nav-groups">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
             </svg>
             <span>Community</span>
+          </a>
+        </li>
+        <li class="nav-item <?= $current_view === 'announcements' ? 'active' : '' ?>">
+          <a href="index.php?view=announcements" id="nav-announcements">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+            </svg>
+            <span>Announcements</span>
           </a>
         </li>
         <?php if (is_admin()): ?>
@@ -2433,25 +2479,35 @@ $popularGroups = $conn->execute_query("
             <span>This is an official group announcement. Published strictly for reading only (comments, replies, and reactions disabled).</span>
           </div>
         </div>
-      <?php elseif ($selected_group_id > 0 && $current_view === 'announcements' && !empty($currentGroup)): ?>
+      <?php elseif ($current_view === 'announcements'): ?>
 
         <!-- DEDICATED ALL ANNOUNCEMENTS VIEW (phpBB Classic Style Feed) -->
         <div class="all-announcements-view" style="margin-bottom: 24px;">
 
           <!-- Top Back & Action Bar -->
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
-            <a href="index.php?group=<?= $selected_group_id ?>" style="display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 700; color: #38bdf8; text-decoration: none; padding: 6px 14px; border-radius: 9999px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); transition: all 0.15s ease;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="19" y1="12" x2="5" y2="12"></line>
-                <polyline points="12 19 5 12 12 5"></polyline>
-              </svg>
-              <span>Back to <?= e($currentGroup['name']) ?></span>
-            </a>
-            <?php if (is_admin()): ?>
-              <button type="button" onclick="openAddNoticeModal(<?= $selected_group_id ?>, 'index.php?group=<?= $selected_group_id ?>&view=announcements')" style="display: inline-flex; align-items: center; gap: 6px; background: var(--primary-blue); color: #ffffff; border: none; border-radius: 9999px; padding: 7px 16px; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.15s ease; box-shadow: 0 2px 8px rgba(29, 155, 240, 0.3);">
-                <span style="font-size: 14px; line-height: 1; font-weight: 800;">+</span>
-                <span>New Announcement</span>
-              </button>
+            <?php if (!empty($selected_group_id) && !empty($currentGroup)): ?>
+              <a href="index.php?group=<?= $selected_group_id ?>" style="display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 700; color: #38bdf8; text-decoration: none; padding: 6px 14px; border-radius: 9999px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); transition: all 0.15s ease;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="19" y1="12" x2="5" y2="12"></line>
+                  <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+                <span>Back to <?= e($currentGroup['name']) ?></span>
+              </a>
+              <?php if (is_admin()): ?>
+                <button type="button" onclick="openAddNoticeModal(<?= $selected_group_id ?>, 'index.php?group=<?= $selected_group_id ?>&view=announcements')" style="display: inline-flex; align-items: center; gap: 6px; background: var(--primary-blue); color: #ffffff; border: none; border-radius: 9999px; padding: 7px 16px; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.15s ease; box-shadow: 0 2px 8px rgba(29, 155, 240, 0.3);">
+                  <span style="font-size: 14px; line-height: 1; font-weight: 800;">+</span>
+                  <span>New Announcement</span>
+                </button>
+              <?php endif; ?>
+            <?php else: ?>
+              <a href="index.php" style="display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 700; color: #38bdf8; text-decoration: none; padding: 6px 14px; border-radius: 9999px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.25); transition: all 0.15s ease;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="19" y1="12" x2="5" y2="12"></line>
+                  <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+                <span>Back to Home</span>
+              </a>
             <?php endif; ?>
           </div>
 
@@ -2460,7 +2516,7 @@ $popularGroups = $conn->execute_query("
 
             <!-- Reddish Section Heading (matching phpBB reference) -->
             <div style="font-size: 16.5px; font-weight: 700; color: #f43f5e; margin-bottom: 24px; letter-spacing: -0.01em; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-              <span>Latest <?= e($currentGroup['name']) ?> Announcements</span>
+              <span><?= (!empty($selected_group_id) && !empty($currentGroup)) ? 'Latest ' . e($currentGroup['name']) . ' Announcements' : 'All Campus Announcements' ?></span>
               <?php if (!empty($groupNotices)): ?>
                 <span style="font-size: 12px; font-weight: 600; color: #94a3b8;"><?= count($groupNotices) ?> <?= count($groupNotices) === 1 ? 'entry' : 'entries' ?></span>
               <?php endif; ?>
@@ -2469,7 +2525,7 @@ $popularGroups = $conn->execute_query("
             <!-- Announcements List -->
             <?php if (empty($groupNotices)): ?>
               <div style="padding: 36px 16px; text-align: center; color: #94a3b8; font-size: 14px;">
-                <?= !empty($search_query) ? 'No announcements matched your search query.' : 'No announcements published for this group yet.' ?>
+                <?= !empty($search_query) ? 'No announcements matched your search query.' : 'No announcements published yet.' ?>
               </div>
             <?php else: ?>
               <div style="display: flex; flex-direction: column; gap: 24px;">
@@ -2498,12 +2554,15 @@ $popularGroups = $conn->execute_query("
                               <path d="M20.5 9C21.3 9.9 21.8 10.9 21.8 12C21.8 13.1 21.3 14.1 20.5 15" stroke="#38bdf8" stroke-width="1.8" stroke-linecap="round"/>
                             </g>
                           </svg>
-                          <a href="index.php?group=<?= $selected_group_id ?>&notice=<?= (int)$gn['id'] ?>" style="font-size: 15.5px; font-weight: 700; color: #58a6ff; text-decoration: underline; text-underline-offset: 3px; word-break: break-word;">
+                          <a href="index.php?group=<?= (int)$gn['group_id'] ?>&notice=<?= (int)$gn['id'] ?>" style="font-size: 15.5px; font-weight: 700; color: #58a6ff; text-decoration: underline; text-underline-offset: 3px; word-break: break-word;">
+                            <?php if (!empty($gn['group_name'])): ?>
+                              <span style="font-size: 12px; color: #38bdf8; text-decoration: none; background: rgba(56, 189, 248, 0.12); padding: 2px 7px; border-radius: 4px; margin-right: 4px;">[<?= e($gn['group_name']) ?>]</span>
+                            <?php endif; ?>
                             Announcement • <?= e($gn['headline']) ?>
                           </a>
                         </div>
                         <?php if (is_admin()): ?>
-                          <a href="index.php?action=delete_group_notice&notice_id=<?= (int)$gn['id'] ?>&group_id=<?= $selected_group_id ?>&redirect=<?= urlencode('index.php?group=' . $selected_group_id . '&view=announcements') ?>" onclick="return confirm('Delete this announcement?')" style="font-size: 11px; color: #f87171; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.28); padding: 2px 8px; border-radius: 4px; text-decoration: none; font-weight: 700; flex-shrink: 0; margin-left: 6px;">
+                          <a href="index.php?action=delete_group_notice&notice_id=<?= (int)$gn['id'] ?>&group_id=<?= (int)$gn['group_id'] ?>&redirect=<?= urlencode($_SERVER['REQUEST_URI'] ?? 'index.php?view=announcements') ?>" onclick="return confirm('Delete this announcement?')" style="font-size: 11px; color: #f87171; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.28); padding: 2px 8px; border-radius: 4px; text-decoration: none; font-weight: 700; flex-shrink: 0; margin-left: 6px;">
                             Delete
                           </a>
                         <?php endif; ?>
@@ -2520,7 +2579,7 @@ $popularGroups = $conn->execute_query("
                         $excerpt = mb_strimwidth($clean, 0, 220, '');
                       ?>
                       <div style="margin-top: 6px; font-size: 13.5px; color: #cbd5e1; line-height: 1.55; word-break: break-word;">
-                        <?= e($excerpt) ?> ... <a href="index.php?group=<?= $selected_group_id ?>&notice=<?= (int)$gn['id'] ?>" style="color: #58a6ff; text-decoration: underline; text-underline-offset: 2px; font-weight: 600;">read more</a>
+                        <?= e($excerpt) ?> ... <a href="index.php?group=<?= (int)$gn['group_id'] ?>&notice=<?= (int)$gn['id'] ?>" style="color: #58a6ff; text-decoration: underline; text-underline-offset: 2px; font-weight: 600;">read more</a>
                       </div>
                     </div>
                   </div>
@@ -2584,6 +2643,13 @@ $popularGroups = $conn->execute_query("
                   <span class="group-meta-item">
                     <span class="group-meta-num"><?= (int)$currentGroup['post_count'] ?></span> discussions
                   </span>
+                  <?php if (!empty($groupNotices)): ?>
+                    <span>·</span>
+                    <a href="index.php?group=<?= $selected_group_id ?>&view=announcements" class="group-meta-item group-meta-announcements-link" style="color: var(--primary-blue); text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" title="View group announcements">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                      <span class="group-meta-num"><?= count($groupNotices) ?></span> <?= count($groupNotices) === 1 ? 'announcement' : 'announcements' ?>
+                    </a>
+                  <?php endif; ?>
                   <span>·</span>
                   <span class="group-meta-item" style="color: var(--text-dim); font-size: 12px;">
 
@@ -2671,6 +2737,10 @@ $popularGroups = $conn->execute_query("
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                 <span>Edit Group</span>
               </button>
+              <button type="button" class="btn-admin-action" onclick="openAddNoticeModal(<?= $selected_group_id ?>, 'index.php?group=<?= $selected_group_id ?>')" title="Post group announcement">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                <span>+ Announcement</span>
+              </button>
               <?php if (($currentGroup['status'] ?? '') === 'private'): ?>
                 <a href="index.php?action=toggle_group_status&group_id=<?= $selected_group_id ?>&status=public&redirect=<?= urlencode("index.php?group=$selected_group_id") ?>" class="btn-admin-action btn-admin-ok" title="Make group public so anyone can view and join">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
@@ -2729,6 +2799,32 @@ $popularGroups = $conn->execute_query("
           <?php endif; ?>
         </div>
 
+        <!-- Mobile Announcements Card (Visible on mobile/tablet screens when group has announcements) -->
+        <?php if (!empty($groupNotices)): ?>
+          <div class="group-mobile-announcements-card">
+            <div class="group-mobile-announcements-header">
+              <div class="group-mobile-announcements-title">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                <span>Announcements</span>
+                <span class="group-mobile-announcements-count"><?= count($groupNotices) ?></span>
+              </div>
+              <a href="index.php?group=<?= $selected_group_id ?>&view=announcements" class="group-mobile-announcements-link">View All &rarr;</a>
+            </div>
+            <div class="group-mobile-announcements-list">
+              <?php foreach (array_slice($groupNotices, 0, 2) as $mNotice): ?>
+                <a href="index.php?group=<?= $selected_group_id ?>&notice=<?= (int)$mNotice['id'] ?>" class="group-mobile-announcement-item">
+                  <div class="group-mobile-announcement-headline"><?= e($mNotice['headline']) ?></div>
+                  <div class="group-mobile-announcement-meta">
+                    <span><?= e($mNotice['author_name'] ?? 'Admin') ?></span>
+                    <span>·</span>
+                    <span><?= date('M j, Y', strtotime($mNotice['created_at'])) ?></span>
+                  </div>
+                </a>
+              <?php endforeach; ?>
+            </div>
+          </div>
+        <?php endif; ?>
+
         <!-- Composer for Group View -->
         <?php if ($isGroupPrivate && !$canViewPrivateGroup): ?>
 
@@ -2778,6 +2874,22 @@ $popularGroups = $conn->execute_query("
           </div>
         <?php endif; ?>
       <?php else: ?>
+
+        <!-- Campus Pinned Announcement Spotlight (Mobile & Desktop) -->
+        <?php if (!empty($latestCampusNotices)): ?>
+          <div class="home-pinned-announcement-strip">
+            <div class="home-announcement-badge">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+              <span>Campus Announcement</span>
+            </div>
+            <div class="home-announcement-body">
+              <a href="index.php?group=<?= (int)$latestCampusNotices[0]['group_id'] ?>&notice=<?= (int)$latestCampusNotices[0]['id'] ?>" class="home-announcement-link">
+                <strong>[<?= e($latestCampusNotices[0]['group_name']) ?>]</strong> <?= e($latestCampusNotices[0]['headline']) ?>
+              </a>
+            </div>
+            <a href="index.php?view=announcements" class="home-announcement-all" title="View all campus announcements">All &rarr;</a>
+          </div>
+        <?php endif; ?>
 
         <!-- HOME FEED COMPOSER -->
         <?php if ($currentUser && !empty($userJoinedGroups)): ?>

@@ -174,7 +174,7 @@ $mobileSearchVal = trim($_GET['q'] ?? '');
         <?php elseif (function_exists('is_faculty') && is_faculty()): ?>
           <span class="user-role-badge badge-faculty" style="font-size: 10px; padding: 2px 7px;">Faculty</span>
         <?php elseif ($currentUser): ?>
-          <span class="user-role-badge badge-student" style="font-size: 10px; padding: 2px 7px;">Student</span>
+          <span class="user-role-badge badge-student" style="font-size: 10px; padding: 2px 7px;">User</span>
         <?php endif; ?>
       </div>
       <span class="mobile-drawer-handle"><?= $currentUser ? (!empty($currentUser['uid']) ? 'ID: ' . e($currentUser['uid']) : '@' . e($currentUser['username'])) : 'Public Browsing Mode' ?></span>
@@ -216,6 +216,17 @@ $mobileSearchVal = trim($_GET['q'] ?? '');
           <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
         </svg>
         <span>Community</span>
+      </a>
+
+      <!-- Campus Announcements -->
+      <a href="index.php?view=announcements" class="mobile-drawer-item <?= (isset($_GET['view']) && $_GET['view'] === 'announcements') ? 'active' : '' ?>" onclick="closeMobileDrawer()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+        </svg>
+        <span>Announcements</span>
+        <span class="mobile-drawer-pill-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">Official</span>
       </a>
 
       <!-- Quick Discussion Composer -->

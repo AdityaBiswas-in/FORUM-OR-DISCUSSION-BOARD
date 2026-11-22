@@ -253,6 +253,16 @@ $recentDiscussions = $conn->query("
             <span>Community</span>
           </a>
         </li>
+        <li class="nav-item">
+          <a href="index.php?view=announcements">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+            </svg>
+            <span>Announcements</span>
+          </a>
+        </li>
         <?php if (function_exists('is_admin') && is_admin()): ?>
         <li class="nav-item nav-item-admin">
           <a href="index.php?view=admin" id="nav-admin" class="nav-link-admin">
@@ -314,7 +324,7 @@ $recentDiscussions = $conn->query("
             <?php elseif (is_faculty()): ?>
               <span class="user-role-badge badge-faculty" style="font-size: 9px; padding: 1px 5px;">Faculty</span>
             <?php else: ?>
-              <span class="user-role-badge badge-student" style="font-size: 9px; padding: 1px 5px;">Student</span>
+              <span class="user-role-badge badge-student" style="font-size: 9px; padding: 1px 5px;">User</span>
             <?php endif; ?>
           </div>
           <span class="user-handle"><?= !empty($currentUser['uid']) ? 'ID: ' . e($currentUser['uid']) : '@' . e($currentUser['username']) ?></span>
@@ -335,7 +345,7 @@ $recentDiscussions = $conn->query("
           <?php elseif (is_faculty()): ?>
             <span class="user-role-badge badge-faculty" style="font-size: 10px; margin-top: 4px; display: inline-block;">Faculty</span>
           <?php else: ?>
-            <span class="user-role-badge badge-student" style="font-size: 10px; margin-top: 4px; display: inline-block;">Student</span>
+            <span class="user-role-badge badge-student" style="font-size: 10px; margin-top: 4px; display: inline-block;">User</span>
           <?php endif; ?>
         </div>
         <a href="profile.php" style="color: var(--text-main); display: flex; align-items: center; gap: 8px;">
