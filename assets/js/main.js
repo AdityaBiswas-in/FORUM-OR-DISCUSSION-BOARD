@@ -810,7 +810,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Admin Console: Live Moderation Post Search & Filters
+  // Admin Console: Live Moderation Post Search, Filters & 15-per-page Pagination
   const adminPostsSearch = document.getElementById('admin-posts-search');
   const adminPostsGroup = document.getElementById('admin-posts-group-filter');
   const adminPostsActivity = document.getElementById('admin-posts-activity-filter');
@@ -818,9 +818,101 @@ document.addEventListener('DOMContentLoaded', () => {
   const adminPostsReset = document.getElementById('admin-posts-reset-filters');
   const adminPostsTable = document.getElementById('admin-posts-table');
   const adminPostsNoResults = document.getElementById('admin-posts-no-results');
+  const adminPostsPagination = document.getElementById('admin-posts-pagination');
+  const adminPostsPaginationControls = document.getElementById('admin-posts-pagination-controls');
+  const adminPostsShowingStart = document.getElementById('admin-posts-showing-start');
+  const adminPostsShowingEnd = document.getElementById('admin-posts-showing-end');
+  const adminPostsTotalCount = document.getElementById('admin-posts-total-count');
 
   if (adminPostsTable && (adminPostsSearch || adminPostsGroup || adminPostsActivity || adminPostsSort)) {
-    const filterAdminPosts = () => {
+    const PAGE_SIZE = 15;
+    let currentModerationPage = 1;
+
+    const renderPaginationControls = (totalPages, currentPage) => {
+      if (!adminPostsPaginationControls) return;
+      adminPostsPaginationControls.innerHTML = '';
+
+      if (totalPages <= 1) {
+        adminPostsPaginationControls.style.display = 'none';
+        return;
+      }
+      adminPostsPaginationControls.style.display = 'flex';
+
+      // Previous button
+      const prevBtn = document.createElement('button');
+      prevBtn.type = 'button';
+      prevBtn.className = 'admin-page-btn' + (currentPage === 1 ? ' disabled' : '');
+      prevBtn.innerHTML = `&larr; Prev`;
+      prevBtn.disabled = (currentPage === 1);
+      prevBtn.setAttribute('aria-label', 'Previous page');
+      prevBtn.addEventListener('click', () => {
+        if (currentModerationPage > 1) {
+          currentModerationPage--;
+          filterAdminPosts(false);
+        }
+      });
+      adminPostsPaginationControls.appendChild(prevBtn);
+
+      // Google-style window of page numbers
+      const getPageList = () => {
+        if (totalPages <= 7) {
+          return Array.from({ length: totalPages }, (_, i) => i + 1);
+        }
+        if (currentPage <= 4) {
+          return [1, 2, 3, 4, 5, '...', totalPages];
+        }
+        if (currentPage >= totalPages - 3) {
+          return [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+        }
+        return [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages];
+      };
+
+      const pages = getPageList();
+      pages.forEach((p) => {
+        if (p === '...') {
+          const ellipsis = document.createElement('span');
+          ellipsis.className = 'admin-page-ellipsis';
+          ellipsis.textContent = '…';
+          adminPostsPaginationControls.appendChild(ellipsis);
+        } else {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'admin-page-btn' + (p === currentPage ? ' active' : '');
+          btn.textContent = p;
+          btn.setAttribute('aria-label', `Page ${p}`);
+          if (p === currentPage) {
+            btn.setAttribute('aria-current', 'page');
+          } else {
+            btn.addEventListener('click', () => {
+              currentModerationPage = p;
+              filterAdminPosts(false);
+            });
+          }
+          adminPostsPaginationControls.appendChild(btn);
+        }
+      });
+
+      // Next button
+      const nextBtn = document.createElement('button');
+      nextBtn.type = 'button';
+      nextBtn.className = 'admin-page-btn' + (currentPage === totalPages ? ' disabled' : '');
+      nextBtn.innerHTML = `Next &rarr;`;
+      nextBtn.disabled = (currentPage === totalPages);
+      nextBtn.setAttribute('aria-label', 'Next page');
+      nextBtn.addEventListener('click', () => {
+        if (currentModerationPage < totalPages) {
+          currentModerationPage++;
+          filterAdminPosts(false);
+        }
+      });
+      adminPostsPaginationControls.appendChild(nextBtn);
+    };
+
+    const filterAdminPosts = (resetPage = false) => {
+      if (resetPage) {
+        currentModerationPage = 1;
+      }
+
       const q = (adminPostsSearch ? adminPostsSearch.value.trim().toLowerCase() : '');
       const selectedGroup = (adminPostsGroup ? adminPostsGroup.value : 'all');
       const selectedActivity = (adminPostsActivity ? adminPostsActivity.value : 'all');
@@ -830,7 +922,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!tbody) return;
 
       const rows = Array.from(tbody.querySelectorAll('tr[data-post-id]'));
-      let visibleCount = 0;
+      const matchingRows = [];
 
       rows.forEach((row) => {
         const title = row.getAttribute('data-title') || '';
@@ -856,13 +948,15 @@ document.addEventListener('DOMContentLoaded', () => {
           matchesActivity = (replies === 0);
         }
 
-        const isVisible = matchesSearch && matchesGroup && matchesActivity;
-        row.style.display = isVisible ? '' : 'none';
-        if (isVisible) visibleCount++;
+        if (matchesSearch && matchesGroup && matchesActivity) {
+          matchingRows.push(row);
+        } else {
+          row.style.display = 'none';
+        }
       });
 
-      // Sorting visible rows
-      rows.sort((a, b) => {
+      // Sort matching rows
+      matchingRows.sort((a, b) => {
         const timeA = parseInt(a.getAttribute('data-timestamp') || '0', 10);
         const timeB = parseInt(b.getAttribute('data-timestamp') || '0', 10);
         const repA = parseInt(a.getAttribute('data-replies') || '0', 10);
@@ -875,17 +969,56 @@ document.addEventListener('DOMContentLoaded', () => {
         return 0;
       });
 
-      rows.forEach((r) => tbody.appendChild(r));
+      // Re-append sorted rows into DOM
+      matchingRows.forEach((r) => tbody.appendChild(r));
 
-      // No results row
+      // Calculate pagination
+      const totalMatching = matchingRows.length;
+      const totalPages = Math.ceil(totalMatching / PAGE_SIZE) || 1;
+      if (currentModerationPage > totalPages) {
+        currentModerationPage = totalPages;
+      }
+      if (currentModerationPage < 1) {
+        currentModerationPage = 1;
+      }
+
+      const startIndex = (currentModerationPage - 1) * PAGE_SIZE;
+      const endIndex = startIndex + PAGE_SIZE;
+
+      matchingRows.forEach((row, idx) => {
+        if (idx >= startIndex && idx < endIndex) {
+          row.style.display = '';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+
+      // Empty State Handling
       if (adminPostsNoResults) {
-        if (visibleCount === 0) {
+        if (totalMatching === 0) {
           tbody.appendChild(adminPostsNoResults);
           adminPostsNoResults.style.display = '';
         } else {
           adminPostsNoResults.style.display = 'none';
         }
       }
+
+      // Update Pagination summary info
+      if (adminPostsPagination) {
+        if (totalMatching === 0) {
+          adminPostsPagination.style.display = 'none';
+        } else {
+          adminPostsPagination.style.display = 'flex';
+          const displayStart = startIndex + 1;
+          const displayEnd = Math.min(endIndex, totalMatching);
+          if (adminPostsShowingStart) adminPostsShowingStart.textContent = displayStart;
+          if (adminPostsShowingEnd) adminPostsShowingEnd.textContent = displayEnd;
+          if (adminPostsTotalCount) adminPostsTotalCount.textContent = totalMatching;
+        }
+      }
+
+      // Render Google-style page buttons
+      renderPaginationControls(totalPages, currentModerationPage);
 
       // Toggle Reset Button
       if (adminPostsReset) {
@@ -894,10 +1027,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     };
 
-    if (adminPostsSearch) adminPostsSearch.addEventListener('input', filterAdminPosts);
-    if (adminPostsGroup) adminPostsGroup.addEventListener('change', filterAdminPosts);
-    if (adminPostsActivity) adminPostsActivity.addEventListener('change', filterAdminPosts);
-    if (adminPostsSort) adminPostsSort.addEventListener('change', filterAdminPosts);
+    if (adminPostsSearch) adminPostsSearch.addEventListener('input', () => filterAdminPosts(true));
+    if (adminPostsGroup) adminPostsGroup.addEventListener('change', () => filterAdminPosts(true));
+    if (adminPostsActivity) adminPostsActivity.addEventListener('change', () => filterAdminPosts(true));
+    if (adminPostsSort) adminPostsSort.addEventListener('change', () => filterAdminPosts(true));
 
     if (adminPostsReset) {
       adminPostsReset.addEventListener('click', () => {
@@ -905,9 +1038,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (adminPostsGroup) adminPostsGroup.value = 'all';
         if (adminPostsActivity) adminPostsActivity.value = 'all';
         if (adminPostsSort) adminPostsSort.value = 'newest';
-        filterAdminPosts();
+        filterAdminPosts(true);
       });
     }
+
+    // Initial run to activate 15 items per page pagination
+    filterAdminPosts(false);
   }
 
   // Admin Subnav Active State

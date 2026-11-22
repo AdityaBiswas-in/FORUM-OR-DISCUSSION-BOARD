@@ -1580,7 +1580,7 @@ if ($current_view === 'admin') {
 
         ORDER BY p.created_at DESC
 
-        LIMIT 100
+        LIMIT 500
 
     ")->fetch_all(MYSQLI_ASSOC);
 
@@ -2781,6 +2781,16 @@ HTML PART starts here
                   </tr>
                 </tbody>
               </table>
+            </div>
+
+            <!-- Content Moderation Google-style Pagination -->
+            <div class="admin-pagination-container" id="admin-posts-pagination">
+              <div class="admin-pagination-info" id="admin-posts-pagination-info">
+                Showing <strong id="admin-posts-showing-start">1</strong>–<strong id="admin-posts-showing-end">15</strong> of <strong id="admin-posts-total-count"><?= count($adminRecentPosts ?? []) ?></strong> discussions
+              </div>
+              <div class="admin-pagination-controls" id="admin-posts-pagination-controls" aria-label="Pagination Navigation">
+                <!-- Dynamically populated Google-style page buttons -->
+              </div>
             </div>
           <?php else: ?>
             <div class="admin-empty-state">No posts available for moderation.</div>
