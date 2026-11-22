@@ -1580,7 +1580,7 @@ if ($current_view === 'admin') {
 
         ORDER BY p.created_at DESC
 
-        LIMIT 25
+        LIMIT 100
 
     ")->fetch_all(MYSQLI_ASSOC);
 
@@ -2701,6 +2701,27 @@ HTML PART starts here
 
             <div class="admin-toolbar">
               <input type="search" id="admin-posts-search" class="admin-search-input" placeholder="Search by title, group, or author..." aria-label="Search recent discussions">
+              <select id="admin-posts-group-filter" class="admin-filter-select" aria-label="Filter discussions by group">
+                <option value="all">All Groups</option>
+                <?php foreach ($adminGroups as $ag): ?>
+                  <option value="<?= (int)$ag['id'] ?>"><?= e($ag['name']) ?></option>
+                <?php endforeach; ?>
+              </select>
+              <select id="admin-posts-activity-filter" class="admin-filter-select" aria-label="Filter discussions by replies">
+                <option value="all">All Activity</option>
+                <option value="has_replies">With Replies</option>
+                <option value="no_replies">No Replies (0)</option>
+              </select>
+              <select id="admin-posts-sort-filter" class="admin-filter-select" aria-label="Sort discussions">
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="most_replies">Most Discussed</option>
+                <option value="fewest_replies">Fewest Replies</option>
+              </select>
+              <button type="button" id="admin-posts-reset-filters" class="btn-admin-action" style="display: none; padding: 0 10px; height: 34px; font-size: 12px; color: var(--text-dim);" title="Reset filters">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                <span>Reset</span>
+              </button>
             </div>
           </div>
 
@@ -2719,7 +2740,13 @@ HTML PART starts here
                 </thead>
                 <tbody>
                   <?php foreach ($adminRecentPosts as $rp): ?>
-                    <tr>
+                    <tr data-post-id="<?= (int)$rp['id'] ?>"
+                        data-group-id="<?= (int)$rp['group_id'] ?>"
+                        data-group-name="<?= e(strtolower($rp['group_name'])) ?>"
+                        data-author="<?= e(strtolower($rp['author_name'] . ' ' . $rp['author_username'])) ?>"
+                        data-title="<?= e(strtolower($rp['title'])) ?>"
+                        data-replies="<?= (int)$rp['reply_count'] ?>"
+                        data-timestamp="<?= strtotime($rp['created_at']) ?>">
                       <td style="max-width: 320px;">
                         <a href="index.php?group=<?= (int)$rp['group_id'] ?>&post=<?= (int)$rp['id'] ?>#post-<?= (int)$rp['id'] ?>" style="font-weight: 600; color: var(--text-main); text-decoration: none;">
                           <?= e($rp['title']) ?>
@@ -2747,6 +2774,11 @@ HTML PART starts here
                       </td>
                     </tr>
                   <?php endforeach; ?>
+                  <tr id="admin-posts-no-results" style="display: none;">
+                    <td colspan="6" style="text-align: center; padding: 32px 16px; color: var(--text-dim); font-size: 13px;">
+                      No discussions match the selected filters.
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>

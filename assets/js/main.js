@@ -810,16 +810,104 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Admin Console: Live Moderation Post Search
+  // Admin Console: Live Moderation Post Search & Filters
   const adminPostsSearch = document.getElementById('admin-posts-search');
+  const adminPostsGroup = document.getElementById('admin-posts-group-filter');
+  const adminPostsActivity = document.getElementById('admin-posts-activity-filter');
+  const adminPostsSort = document.getElementById('admin-posts-sort-filter');
+  const adminPostsReset = document.getElementById('admin-posts-reset-filters');
   const adminPostsTable = document.getElementById('admin-posts-table');
-  if (adminPostsSearch && adminPostsTable) {
-    adminPostsSearch.addEventListener('input', () => {
-      const q = adminPostsSearch.value.trim().toLowerCase();
-      adminPostsTable.querySelectorAll('tbody tr').forEach((row) => {
-        row.style.display = (!q || row.textContent.toLowerCase().includes(q)) ? '' : 'none';
+  const adminPostsNoResults = document.getElementById('admin-posts-no-results');
+
+  if (adminPostsTable && (adminPostsSearch || adminPostsGroup || adminPostsActivity || adminPostsSort)) {
+    const filterAdminPosts = () => {
+      const q = (adminPostsSearch ? adminPostsSearch.value.trim().toLowerCase() : '');
+      const selectedGroup = (adminPostsGroup ? adminPostsGroup.value : 'all');
+      const selectedActivity = (adminPostsActivity ? adminPostsActivity.value : 'all');
+      const selectedSort = (adminPostsSort ? adminPostsSort.value : 'newest');
+
+      const tbody = adminPostsTable.querySelector('tbody');
+      if (!tbody) return;
+
+      const rows = Array.from(tbody.querySelectorAll('tr[data-post-id]'));
+      let visibleCount = 0;
+
+      rows.forEach((row) => {
+        const title = row.getAttribute('data-title') || '';
+        const groupName = row.getAttribute('data-group-name') || '';
+        const author = row.getAttribute('data-author') || '';
+        const groupId = row.getAttribute('data-group-id') || '';
+        const replies = parseInt(row.getAttribute('data-replies') || '0', 10);
+
+        // Search match
+        const matchesSearch = !q ||
+          title.includes(q) ||
+          groupName.includes(q) ||
+          author.includes(q);
+
+        // Group match
+        const matchesGroup = (selectedGroup === 'all' || selectedGroup === groupId);
+
+        // Activity match
+        let matchesActivity = true;
+        if (selectedActivity === 'has_replies') {
+          matchesActivity = (replies > 0);
+        } else if (selectedActivity === 'no_replies') {
+          matchesActivity = (replies === 0);
+        }
+
+        const isVisible = matchesSearch && matchesGroup && matchesActivity;
+        row.style.display = isVisible ? '' : 'none';
+        if (isVisible) visibleCount++;
       });
-    });
+
+      // Sorting visible rows
+      rows.sort((a, b) => {
+        const timeA = parseInt(a.getAttribute('data-timestamp') || '0', 10);
+        const timeB = parseInt(b.getAttribute('data-timestamp') || '0', 10);
+        const repA = parseInt(a.getAttribute('data-replies') || '0', 10);
+        const repB = parseInt(b.getAttribute('data-replies') || '0', 10);
+
+        if (selectedSort === 'newest') return timeB - timeA;
+        if (selectedSort === 'oldest') return timeA - timeB;
+        if (selectedSort === 'most_replies') return repB - repA || (timeB - timeA);
+        if (selectedSort === 'fewest_replies') return repA - repB || (timeB - timeA);
+        return 0;
+      });
+
+      rows.forEach((r) => tbody.appendChild(r));
+
+      // No results row
+      if (adminPostsNoResults) {
+        if (visibleCount === 0) {
+          tbody.appendChild(adminPostsNoResults);
+          adminPostsNoResults.style.display = '';
+        } else {
+          adminPostsNoResults.style.display = 'none';
+        }
+      }
+
+      // Toggle Reset Button
+      if (adminPostsReset) {
+        const isFiltered = (q !== '' || selectedGroup !== 'all' || selectedActivity !== 'all' || selectedSort !== 'newest');
+        adminPostsReset.style.display = isFiltered ? 'inline-flex' : 'none';
+      }
+    };
+
+    if (adminPostsSearch) adminPostsSearch.addEventListener('input', filterAdminPosts);
+    if (adminPostsGroup) adminPostsGroup.addEventListener('change', filterAdminPosts);
+    if (adminPostsActivity) adminPostsActivity.addEventListener('change', filterAdminPosts);
+    if (adminPostsSort) adminPostsSort.addEventListener('change', filterAdminPosts);
+
+    if (adminPostsReset) {
+      adminPostsReset.addEventListener('click', () => {
+        if (adminPostsSearch) adminPostsSearch.value = '';
+        if (adminPostsGroup) adminPostsGroup.value = 'all';
+        if (adminPostsActivity) adminPostsActivity.value = 'all';
+        if (adminPostsSort) adminPostsSort.value = 'newest';
+        filterAdminPosts();
+      });
+    }
   }
 
   // Admin Subnav Active State
