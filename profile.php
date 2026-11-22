@@ -872,7 +872,7 @@ function closeEditProfileModal() {
 // 2. Live Image Upload Previews
 function handleModalBannerPreview(input) {
   if (input.files && input.files[0]) {
-    const reader = new FileReader();
+    const reader = new window.FileReader();
     reader.onload = function(e) {
       const img = document.getElementById('preview-modal-banner');
       if (img) {
@@ -886,7 +886,7 @@ function handleModalBannerPreview(input) {
 
 function handleModalAvatarPreview(input) {
   if (input.files && input.files[0]) {
-    const reader = new FileReader();
+    const reader = new window.FileReader();
     reader.onload = function(e) {
       const img = document.getElementById('preview-modal-avatar');
       if (img) img.src = e.target.result;
