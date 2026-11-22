@@ -282,7 +282,7 @@ function renderReplyNode(array $rep, array $childrenByParent, array $repliesById
 
 
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
-if ($action !== '' && $action !== 'get_group_members' && !$currentUser) {
+if ($action !== '' && !$currentUser) {
     if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
         header('Content-Type: application/json');
         echo json_encode(['success' => false, 'redirect' => 'register.php']);
@@ -450,9 +450,13 @@ if ($action === 'leave_group') {
 // GROUP MEMBER MANAGEMENT (View, Remove & Ban Members)
 // ========================================================
 
-// 1. Fetch Group Members (AJAX)
+// 1. Fetch Group Members (AJAX - Admin Only)
 if ($action === 'get_group_members') {
     header('Content-Type: application/json');
+    if (!is_admin()) {
+        echo json_encode(['success' => false, 'message' => 'Unauthorized. Only administrators can view and manage community members.']);
+        exit;
+    }
     $groupId = (int)($_REQUEST['group_id'] ?? 0);
     if ($groupId <= 0) {
         echo json_encode(['success' => false, 'message' => 'Invalid group ID.']);
@@ -2897,13 +2901,13 @@ HTML PART starts here
                   </p>
 
                   <div class="group-card-meta">
-
-                    <span style="cursor: pointer; text-decoration: underline; text-underline-offset: 2px;" onclick="event.preventDefault(); event.stopPropagation(); openGroupMembersModal(<?= (int)$g['id'] ?>, '<?= e(addslashes($g['name'])) ?>')" title="View members"><strong><?= (int)$g['member_count'] ?></strong> <?= (int)$g['member_count'] === 1 ? 'Member' : 'Members' ?></span>
-
+                    <?php if (is_admin()): ?>
+                      <span style="cursor: pointer; text-decoration: underline; text-underline-offset: 2px;" onclick="event.preventDefault(); event.stopPropagation(); openGroupMembersModal(<?= (int)$g['id'] ?>, '<?= e(addslashes($g['name'])) ?>')" title="View and moderate members"><strong><?= (int)$g['member_count'] ?></strong> <?= (int)$g['member_count'] === 1 ? 'Member' : 'Members' ?></span>
+                    <?php else: ?>
+                      <span><strong><?= (int)$g['member_count'] ?></strong> <?= (int)$g['member_count'] === 1 ? 'Member' : 'Members' ?></span>
+                    <?php endif; ?>
                     <span>·</span>
-
                     <span><strong><?= (int)$g['post_count'] ?></strong> <?= (int)$g['post_count'] === 1 ? 'Discussion' : 'Discussions' ?></span>
-
                   </div>
 
                 </div>
@@ -3270,11 +3274,15 @@ HTML PART starts here
 
                 <div class="group-meta-stats" style="margin-top: 6px;">
 
-                  <button type="button" class="group-meta-item group-meta-members-btn" onclick="openGroupMembersModal(<?= $selected_group_id ?>, '<?= e(addslashes($currentGroup['name'])) ?>')" title="<?= is_admin() ? 'Click to view & manage members (Remove / Ban)' : 'Click to view members' ?>" style="background: none; border: none; padding: 0; color: inherit; font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; text-decoration: underline; text-underline-offset: 3px;">
-
-                    <span class="group-meta-num" id="group-header-member-count"><?= (int)$currentGroup['member_count'] ?></span> <?= (int)$currentGroup['member_count'] === 1 ? 'member' : 'members' ?>
-
-                  </button>
+                  <?php if (is_admin()): ?>
+                    <button type="button" class="group-meta-item group-meta-members-btn" onclick="openGroupMembersModal(<?= $selected_group_id ?>, '<?= e(addslashes($currentGroup['name'])) ?>')" title="Click to view & manage members (Remove / Ban)" style="background: none; border: none; padding: 0; color: inherit; font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; text-decoration: underline; text-underline-offset: 3px;">
+                      <span class="group-meta-num" id="group-header-member-count"><?= (int)$currentGroup['member_count'] ?></span> <?= (int)$currentGroup['member_count'] === 1 ? 'member' : 'members' ?>
+                    </button>
+                  <?php else: ?>
+                    <span class="group-meta-item">
+                      <span class="group-meta-num" id="group-header-member-count"><?= (int)$currentGroup['member_count'] ?></span> <?= (int)$currentGroup['member_count'] === 1 ? 'member' : 'members' ?>
+                    </span>
+                  <?php endif; ?>
 
                   <span>·</span>
 
@@ -5140,6 +5148,7 @@ HTML PART starts here
 
 
 
+<?php if (is_admin()): ?>
 <!-- GROUP MEMBERS MODAL (Admin: View, Remove & Ban Members) -->
 <div class="modal-overlay" id="group-members-modal" onclick="if(event.target===this) closeGroupMembersModal()">
   <div class="modal-dialog group-members-dialog" style="max-width: 560px; width: 100%; max-height: 85vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; border-radius: 16px;">
@@ -5156,7 +5165,7 @@ HTML PART starts here
           <span id="group-members-header-text">Community Members</span>
         </h3>
         <p style="margin: 3px 0 0; font-size: 12.5px; color: var(--text-dim);" id="group-members-subtitle">
-          View members<?php if (is_admin()): ?> &middot; Admin Management (Remove / Ban)<?php endif; ?>
+          View members &middot; Admin Management (Remove / Ban)
         </p>
       </div>
       <button type="button" class="btn-close-modal" onclick="closeGroupMembersModal()" aria-label="Close" style="background: none; border: none; font-size: 18px; color: var(--text-dim); cursor: pointer; padding: 4px 8px; border-radius: 6px;">✕</button>
@@ -5167,11 +5176,9 @@ HTML PART starts here
       <button type="button" id="tab-active-members" class="gm-tab-btn active" onclick="switchGroupMembersTab('active')">
         Active Members (<span id="count-active-members">0</span>)
       </button>
-      <?php if (is_admin()): ?>
       <button type="button" id="tab-banned-members" class="gm-tab-btn" onclick="switchGroupMembersTab('banned')">
         Banned (<span id="count-banned-members">0</span>)
       </button>
-      <?php endif; ?>
     </div>
 
     <!-- Search Input -->
@@ -5204,6 +5211,7 @@ HTML PART starts here
     </div>
   </div>
 </div>
+<?php endif; ?>
 
 <!-- FULL IMAGE LIGHTBOX PREVIEW -->
 
