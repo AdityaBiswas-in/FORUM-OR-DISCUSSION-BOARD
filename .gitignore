@@ -1,0 +1,5 @@
+# Ignore a specific folder and everything inside it:
+
+
+# Or a nested folder:
+assets/images
