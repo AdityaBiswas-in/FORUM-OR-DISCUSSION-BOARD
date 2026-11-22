@@ -262,6 +262,13 @@ if ($action === 'join_group') {
             header("Location: index.php?group=$groupId&error=banned_from_group");
             exit;
         }
+        // If user is already a member, remove any stale request and redirect
+        if (is_group_member($currentUser['id'], $groupId, $conn)) {
+            $conn->execute_query("DELETE FROM group_requests WHERE group_id = ? AND user_id = ?", [$groupId, $currentUser['id']]);
+            $redirect = !empty($_REQUEST['redirect']) ? $_REQUEST['redirect'] : "index.php?group=$groupId";
+            header("Location: $redirect");
+            exit;
+        }
         $grp = $conn->execute_query("SELECT id, status FROM groups WHERE id = ?", [$groupId])->fetch_assoc();
         if ($grp) {
             $isPrivate = (($grp['status'] ?? '') === 'private');
@@ -1262,11 +1269,22 @@ if ($selected_group_id > 0) {
         $hasPendingRequest = ($currentUser && !$isGroupMember) ? has_group_request($currentUserId, $selected_group_id, $conn) : false;
 
         if (is_admin()) {
+            // Auto-clean any stale requests for users who are already active group members
+            $conn->execute_query("
+                DELETE gr FROM group_requests gr
+                INNER JOIN group_members gm ON gr.group_id = gm.group_id AND gr.user_id = gm.user_id
+                WHERE gr.group_id = ?
+            ", [$selected_group_id]);
+
             $groupPendingRequests = $conn->execute_query("
                 SELECT gr.id as req_id, gr.user_id, gr.created_at, u.name, u.email, u.avatar, u.role
                 FROM group_requests gr
                 JOIN users u ON gr.user_id = u.id
                 WHERE gr.group_id = ?
+                  AND NOT EXISTS (
+                      SELECT 1 FROM group_members gm
+                      WHERE gm.group_id = gr.group_id AND gm.user_id = gr.user_id
+                  )
                 ORDER BY gr.created_at ASC
             ", [$selected_group_id])->fetch_all(MYSQLI_ASSOC);
         }

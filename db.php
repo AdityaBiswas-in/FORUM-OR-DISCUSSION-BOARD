@@ -312,6 +312,10 @@ if (!function_exists('is_group_member')) {
 if (!function_exists('has_group_request')) {
     function has_group_request(int $userId, int $groupId, mysqli $conn): bool {
         if ($userId <= 0 || $groupId <= 0) return false;
+        if (is_group_member($userId, $groupId, $conn)) {
+            $conn->execute_query("DELETE FROM group_requests WHERE user_id = ? AND group_id = ?", [$userId, $groupId]);
+            return false;
+        }
         $stmt = $conn->execute_query("SELECT 1 FROM group_requests WHERE user_id = ? AND group_id = ? LIMIT 1", [$userId, $groupId]);
         return (bool)$stmt->fetch_row();
     }
