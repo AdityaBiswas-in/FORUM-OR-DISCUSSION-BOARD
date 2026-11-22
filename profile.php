@@ -375,16 +375,34 @@ $recentDiscussions = $conn->query("
   <main class="main-feed-column">
     <!-- Top Header Bar with Back Button -->
     <div class="profile-top-header">
-      <a href="index.php" class="btn-profile-back" title="Back to discussions">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <line x1="19" y1="12" x2="5" y2="12"></line>
-          <polyline points="12 19 5 12 12 5"></polyline>
-        </svg>
-      </a>
-      <div class="profile-header-titles">
-        <h2><?= e($profileUser['name']) ?></h2>
-        <span><?= $postCount ?> Discussions</span>
+      <div style="display: flex; align-items: center; gap: 16px; flex: 1; min-width: 0;">
+        <a href="index.php" class="btn-profile-back" title="Back to discussions">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </a>
+        <div class="profile-header-titles" style="min-width: 0;">
+          <h2 style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><?= e($profileUser['name']) ?></h2>
+          <span><?= $postCount ?> Discussions</span>
+        </div>
       </div>
+      <button type="button" class="mobile-top-theme-btn" onclick="toggleTheme()" aria-label="Toggle Theme" title="Toggle theme">
+        <svg class="theme-icon-sun" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+        <svg class="theme-icon-moon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </button>
     </div>
 
     <!-- Alert Messages -->
@@ -822,55 +840,15 @@ $recentDiscussions = $conn->query("
   <img src="" alt="Enlarged view" id="lightbox-img" class="lightbox-img" onclick="event.stopPropagation()">
 </div>
 
+<!-- Toast Notification Container -->
+<div id="toast-container" class="toast-container"></div>
+
 <!-- ==========================================================================
      SECTION 9: CLIENT-SIDE JAVASCRIPT CONTROLLERS
      ========================================================================== -->
+<script src="assets/js/main.js?v=<?= filemtime(__DIR__ . '/assets/js/main.js') ?>"></script>
 <script>
-// 1. Theme Management
-function initTheme() {
-  const saved = localStorage.getItem('campus_theme') || 'dark';
-  document.documentElement.setAttribute('data-theme', saved);
-  updateThemeIcon(saved);
-}
-
-function toggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme') || 'dark';
-  const next = current === 'dark' ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', next);
-  localStorage.setItem('campus_theme', next);
-  updateThemeIcon(next);
-}
-
-function updateThemeIcon(theme) {
-  const sun = document.querySelector('.theme-icon-sun');
-  const moon = document.querySelector('.theme-icon-moon');
-  const label = document.getElementById('theme-label-text');
-
-  if (theme === 'light') {
-    if (sun) sun.style.display = 'block';
-    if (moon) moon.style.display = 'none';
-    if (label) label.textContent = 'Theme: Light';
-  } else {
-    if (sun) sun.style.display = 'none';
-    if (moon) moon.style.display = 'block';
-    if (label) label.textContent = 'Theme: Dark';
-  }
-}
-initTheme();
-
-// 2. Profile Dropdown Menu Toggle
-function toggleProfileDropdown(e) {
-  e.stopPropagation();
-  const menu = document.getElementById('profile-dropdown-menu');
-  if (menu) menu.classList.toggle('active');
-}
-
-document.addEventListener('click', () => {
-  const menu = document.getElementById('profile-dropdown-menu');
-  if (menu) menu.classList.remove('active');
-});
-
-// 3. Edit Profile Modal Dialog
+// 1. Edit Profile Modal Dialog
 function openEditProfileModal() {
   const modal = document.getElementById('edit-profile-modal');
   if (modal) modal.classList.add('active');
@@ -881,10 +859,10 @@ function closeEditProfileModal() {
   if (modal) modal.classList.remove('active');
 }
 
-// 4. Live Image Upload Previews
+// 2. Live Image Upload Previews
 function handleModalBannerPreview(input) {
   if (input.files && input.files[0]) {
-    const reader = new window.FileReader();
+    const reader = new FileReader();
     reader.onload = function(e) {
       const img = document.getElementById('preview-modal-banner');
       if (img) {
@@ -898,7 +876,7 @@ function handleModalBannerPreview(input) {
 
 function handleModalAvatarPreview(input) {
   if (input.files && input.files[0]) {
-    const reader = new window.FileReader();
+    const reader = new FileReader();
     reader.onload = function(e) {
       const img = document.getElementById('preview-modal-avatar');
       if (img) img.src = e.target.result;
@@ -907,7 +885,7 @@ function handleModalAvatarPreview(input) {
   }
 }
 
-// 5. Bio Character Counter
+// 3. Bio Character Counter
 const bioTextarea = document.getElementById('edit-profile-bio');
 const bioCharCount = document.getElementById('bio-char-count');
 if (bioTextarea && bioCharCount) {
@@ -917,28 +895,12 @@ if (bioTextarea && bioCharCount) {
   });
 }
 
-// 6. Safe Card Click Handler (allows text selection without opening link)
+// 4. Safe Card Click Handler (allows text selection without opening link)
 function handleProfileCardClick(event, url) {
   const selection = window.getSelection ? window.getSelection() : null;
   if (selection && selection.toString().length > 0) return;
   if (event.target && event.target.closest('button, a, input, textarea, label')) return;
   window.location.href = url;
-}
-
-// 7. Lightbox Previewer
-function openLightbox(url) {
-  const overlay = document.getElementById('lightbox-overlay');
-  const img = document.getElementById('lightbox-img');
-  if (overlay && img) {
-    img.src = url;
-    overlay.classList.add('active');
-  }
-}
-
-function closeLightbox(e) {
-  if (e) e.stopPropagation();
-  const overlay = document.getElementById('lightbox-overlay');
-  if (overlay) overlay.classList.remove('active');
 }
 </script>
 </body>

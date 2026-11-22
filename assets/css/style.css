@@ -2489,7 +2489,8 @@ img, svg {
   .mobile-post-fab,
   .mobile-bottom-nav-zone,
   .mobile-drawer-backdrop,
-  .mobile-drawer {
+  .mobile-drawer,
+  .profile-top-header .mobile-top-theme-btn {
     display: none !important;
   }
 }
@@ -2547,7 +2548,7 @@ img, svg {
 
   .app-container {
     display: block !important;
-    padding: 0 0 70px 0 !important;
+    padding: 0 0 calc(75px + env(safe-area-inset-bottom, 0px)) 0 !important;
     max-width: 100% !important;
     margin: 0 !important;
   }
@@ -2647,7 +2648,7 @@ img, svg {
   /* 2. Mobile Floating Action Button (FAB) */
   .mobile-post-fab {
     position: fixed;
-    bottom: 72px;
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
     right: 18px;
     width: 52px;
     height: 52px;
@@ -2682,7 +2683,8 @@ img, svg {
   }
 
   .mobile-bottom-bar {
-    height: 54px;
+    height: calc(54px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     background-color: var(--bg-card);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
@@ -2690,7 +2692,8 @@ img, svg {
     display: flex;
     align-items: center;
     justify-content: space-around;
-    padding: 0 12px;
+    padding-left: 12px;
+    padding-right: 12px;
   }
 
   .mobile-nav-btn {
@@ -2970,6 +2973,159 @@ img, svg {
 
   .mobile-theme-switch-pill.active .mobile-theme-switch-thumb {
     transform: translateX(18px);
+  }
+
+  /* 5. Mobile Modals Bottom-Sheet & Scroll Handling */
+  .modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .modal-dialog,
+  .x-compose-dialog {
+    max-height: 90vh !important;
+    max-height: 90dvh !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    border-top-left-radius: 18px !important;
+    border-top-right-radius: 18px !important;
+    margin: auto 0 0 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .modal-body,
+  .x-compose-body {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    flex: 1;
+    max-height: calc(90vh - 120px);
+  }
+
+  .x-compose-bottom-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .x-toolbar-icons,
+  .format-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .composer-bottom-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .composer-tools {
+    flex-wrap: wrap;
+  }
+
+  /* 6. Media Images on Mobile */
+  .post-media-item {
+    height: 160px;
+  }
+
+  .post-media-grid.grid-3 {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .post-media-grid.grid-3 .post-media-item:first-child {
+    grid-column: span 2;
+  }
+
+  /* 7. Nested Reply Tree Indentation */
+  .reply-children-list,
+  .reply-children-container {
+    margin-left: 8px;
+    padding-left: 8px;
+    border-left-width: 1.5px;
+  }
+
+  /* 8. Profile Page Mobile View */
+  .profile-top-header {
+    padding: 8px 14px;
+  }
+
+  .profile-header-titles h2 {
+    font-size: 16px;
+  }
+
+  .profile-banner-hero {
+    height: 135px;
+  }
+
+  .profile-avatar-action-row {
+    margin-top: -42px;
+    margin-bottom: 10px;
+  }
+
+  .profile-avatar-lg {
+    width: 82px;
+    height: 82px;
+    border-width: 3px;
+  }
+
+  .btn-edit-profile-pill {
+    padding: 6px 14px;
+    font-size: 13px;
+  }
+
+  .profile-display-name {
+    font-size: 18px;
+  }
+
+  .profile-stats-row {
+    gap: 16px;
+  }
+
+  .profile-tabs {
+    gap: 0;
+  }
+
+  .profile-tab-btn {
+    padding: 12px 10px;
+    font-size: 13.5px;
+  }
+
+  /* 9. Academic Group Header & Single Discussion Header */
+  .group-header-banner {
+    padding: 14px 16px;
+    border-radius: 14px;
+    margin-bottom: 14px;
+  }
+
+  .group-icon-wrap {
+    width: 44px;
+    height: 44px;
+    font-size: 20px;
+    border-radius: 12px;
+  }
+
+  .group-header-title {
+    font-size: 18px;
+  }
+
+  .single-discussion-header {
+    padding: 10px 14px;
+    gap: 8px;
+  }
+
+  .btn-back-discussion {
+    font-size: 12.5px;
+    padding: 5px 10px;
+    max-width: 75%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .single-discussion-label {
+    display: none;
   }
 }
 
