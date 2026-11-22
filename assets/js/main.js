@@ -1906,9 +1906,7 @@ function renderActiveMembers(members, isAdmin, groupId) {
       ? `<span class="gm-badge gm-badge-creator">Creator</span>`
       : m.role === 'admin'
       ? `<span class="gm-badge gm-badge-admin">Admin</span>`
-      : m.role === 'faculty'
-      ? `<span class="gm-badge gm-badge-faculty">Faculty</span>`
-      : `<span class="gm-badge gm-badge-student">Student</span>`;
+      : `<span class="gm-badge gm-badge-student">User</span>`;
 
     let actionsHtml = '';
     if (isAdmin && m.can_moderate) {

@@ -3865,7 +3865,7 @@ a.post-group-author-link:hover .author-name {
 /* Unified Metric Strip */
 .admin-stats-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background: var(--bg-card);

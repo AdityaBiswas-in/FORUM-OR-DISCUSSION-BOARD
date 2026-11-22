@@ -1596,9 +1596,9 @@ if ($current_view === 'admin') {
 
     $stats['total_posts'] = (int)$conn->query("SELECT COUNT(*) FROM posts")->fetch_row()[0];
 
-    $stats['total_students'] = (int)$conn->query("SELECT COUNT(*) FROM users WHERE role = 'student'")->fetch_row()[0];
+    $stats['total_users'] = (int)$conn->query("SELECT COUNT(*) FROM users WHERE role != 'admin'")->fetch_row()[0];
 
-    $stats['total_faculty'] = (int)$conn->query("SELECT COUNT(*) FROM users WHERE role = 'faculty'")->fetch_row()[0];
+    $stats['total_students'] = $stats['total_users'];
 
 }
 
@@ -2076,7 +2076,7 @@ HTML PART starts here
 
             <?php else: ?>
 
-              <span class="user-role-badge badge-student">Student</span>
+              <span class="user-role-badge badge-student">User</span>
 
             <?php endif; ?>
 
@@ -2517,19 +2517,10 @@ HTML PART starts here
             <div class="admin-stat-card">
               <div class="admin-stat-label">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                <span>Students</span>
+                <span>Users</span>
               </div>
-              <div class="admin-stat-num"><?= (int)($stats['total_students'] ?? 0) ?></div>
-              <div class="admin-stat-sub">Registered student accounts</div>
-            </div>
-
-            <div class="admin-stat-card">
-              <div class="admin-stat-label">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
-                <span>Faculty</span>
-              </div>
-              <div class="admin-stat-num"><?= (int)($stats['total_faculty'] ?? 0) ?></div>
-              <div class="admin-stat-sub">Registered faculty accounts</div>
+              <div class="admin-stat-num"><?= (int)($stats['total_users'] ?? 0) ?></div>
+              <div class="admin-stat-sub">Registered user accounts</div>
             </div>
           </div>
         </section>
@@ -3474,7 +3465,7 @@ HTML PART starts here
                       <div style="display: flex; align-items: center; gap: 10px;">
                         <img src="<?= e($req['avatar'] ?: 'assets/images/default-avatar.png') ?>" style="width: 34px; height: 34px; border-radius: 50%; object-fit: cover;">
                         <div>
-                          <div style="font-size: 13.5px; font-weight: 600; color: var(--text-main);"><?= e($req['name']) ?> <span style="font-size: 11px; color: var(--text-muted);">(<?= e($req['role']) ?>)</span></div>
+                          <div style="font-size: 13.5px; font-weight: 600; color: var(--text-main);"><?= e($req['name']) ?> <span style="font-size: 11px; color: var(--text-muted);">(<?= e($req['role'] === 'student' ? 'user' : $req['role']) ?>)</span></div>
                           <div style="font-size: 11.5px; color: var(--text-muted);"><?= e($req['email']) ?> · Requested <?= date('M j, Y g:i a', strtotime($req['created_at'])) ?></div>
                         </div>
                       </div>
