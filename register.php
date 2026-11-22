@@ -1,4 +1,14 @@
 <?php
+/* ==========================================================================
+   QUADDIT PLATFORM - USER REGISTRATION CONTROLLER
+   File: register.php
+   Purpose: Handles new user registration, validation, password hashing,
+            account role generation, and the registration UI template.
+   ========================================================================== */
+
+// ==========================================================================
+// 1. REGISTRATION ROUTING & ROLE CONFIGURATION
+// ==========================================================================
 require_once __DIR__ . '/db.php';
 
 if (is_logged_in()) {
@@ -19,6 +29,9 @@ if (!in_array($requestedRole, ['student', 'faculty', 'admin'])) {
 $error = '';
 $success = '';
 
+// ==========================================================================
+// 2. REGISTRATION CONTROLLER & INPUT VALIDATION (POST)
+// ==========================================================================
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $role       = strtolower(trim($_POST['reg_role'] ?? 'student'));
     if (!in_array($role, ['student', 'faculty', 'admin'])) {
@@ -133,6 +146,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
 }
 ?>
+<!-- ==========================================================================
+     3. REGISTRATION INTERFACE & INPUT FORM CARD
+     ========================================================================== -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -290,8 +306,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     </div>
   </div>
 
+  <!-- ==========================================================================
+       4. CLIENT-SIDE VALIDATION & UI SCRIPTS
+       ========================================================================== -->
   <script>
-    function updateAuthThemeUI(theme) {
       document.documentElement.setAttribute('data-theme', theme);
       const icon = document.getElementById('auth-theme-icon');
       const text = document.getElementById('auth-theme-text');

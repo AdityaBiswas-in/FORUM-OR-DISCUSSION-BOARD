@@ -1,4 +1,14 @@
 <?php
+/* ==========================================================================
+   QUADDIT PLATFORM - USER AUTHENTICATION & LOGIN CONTROLLER
+   File: login.php
+   Purpose: Verifies user credentials, handles instant/demo login, starts authenticated
+            sessions, and renders the responsive sign-in interface.
+   ========================================================================== */
+
+// ==========================================================================
+// 1. PORTAL ROUTING & SESSION VERIFICATION
+// ==========================================================================
 require_once __DIR__ . '/db.php';
 
 // Determine active login portal
@@ -29,6 +39,10 @@ if ($registeredType === '1') {
 
 $login_input = trim($_GET['email'] ?? '') ?: $registeredId ?: trim($_GET['username'] ?? '');
 
+// ==========================================================================
+// 2. AUTHENTICATION CONTROLLER HANDLER (POST)
+// Processes standard credential verification and demo instant-login requests.
+// ==========================================================================
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $action = $_POST['action'] ?? 'login';
     $login_role = strtolower(trim($_POST['login_role'] ?? 'student'));
@@ -230,6 +244,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
 }
 ?>
+<!-- ==========================================================================
+     3. LOGIN INTERFACE & AUTHENTICATION CARD TEMPLATE
+     Renders branding header, role tabs, input form, and instant sign-in modal.
+     ========================================================================== -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -399,8 +417,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     </div>
   </div>
 
+  <!-- ==========================================================================
+       4. CLIENT-SIDE INTERACTION SCRIPTS (Theme, Password Toggle, Modals)
+       ========================================================================== -->
   <script>
-    function updateAuthThemeUI(theme) {
       document.documentElement.setAttribute('data-theme', theme);
       const icon = document.getElementById('auth-theme-icon');
       const text = document.getElementById('auth-theme-text');

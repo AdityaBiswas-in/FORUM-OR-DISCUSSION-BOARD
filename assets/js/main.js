@@ -1,6 +1,14 @@
-// assets/js/main.js - Unified Client Interaction for CampusForum
+/* ==========================================================================
+   QUADDIT PLATFORM - CLIENT INTERACTION ENGINE
+   File: assets/js/main.js
+   Purpose: Global client-side interactivity, theme switching, modal management,
+            visual rich text editor, AJAX pagination, filters, and member moderation.
+   ========================================================================== */
 
-// 1. Theme Switcher Logic
+/* ==========================================================================
+   MODULE 1: THEME & DISPLAY PREFERENCES
+   Controls Light/Dark theme switching, persistence, and reactive UI icons.
+   ========================================================================== */
 function getSavedTheme() {
   return localStorage.getItem('campus_theme') || 'dark';
 }
@@ -810,6 +818,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  /* ==========================================================================
+     MODULE 10: ADMIN CONTENT MODERATION (SEARCH, FILTER & PAGINATION)
+     Real-time client filtering by group, activity, keywords, and Google-style pagination.
+     ========================================================================== */
   // Admin Console: Live Moderation Post Search, Filters & 15-per-page Pagination
   const adminPostsSearch = document.getElementById('admin-posts-search');
   const adminPostsGroup = document.getElementById('admin-posts-group-filter');
@@ -1181,9 +1193,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// ========================================================
-// Visual Rich Post Composer Formatting Engine (WYSIWYG Bold, Italic, Strike, Heading)
-// ========================================================
+/* ==========================================================================
+   MODULE 11: VISUAL RICH-TEXT FORMATTING ENGINE (WYSIWYG)
+   Handles inline formatting (Bold, Italic, Strikethrough, Heading, Lists, Links).
+   ========================================================================== */
 
 function syncRichEditor(editor) {
   if (!editor) return;
@@ -1773,9 +1786,10 @@ window.syncRichEditor = syncRichEditor;
 window.applyVisualFormat = applyVisualFormat;
 window.updateToolbarStates = updateToolbarStates;
 
-// ========================================================
-// GROUP MEMBERS MODAL (View, Remove & Ban Members)
-// ========================================================
+/* ==========================================================================
+   MODULE 12: GROUP MEMBERS & MODERATION MODAL
+   Allows community administrators to view active members, remove, and ban users.
+   ========================================================================== */
 let currentMembersGroupId = 0;
 let groupMembersCache = { members: [], banned: [] };
 
