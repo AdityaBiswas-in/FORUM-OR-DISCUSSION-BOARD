@@ -2757,9 +2757,10 @@ $popularGroups = $conn->execute_query("
               </a>
             </div>
             <?php if (!empty($groupPendingRequests)): ?>
-              <div class="group-admin-requests-panel" style="background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.28); border-radius: 16px; padding: 16px 20px; margin-top: 14px;">
+              <!-- Pending requests panel — neutral border, no purple glow -->
+              <div class="group-admin-requests-panel" style="background: var(--bg-elevated); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px 20px; margin-top: 14px;">
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
-                  <h3 style="margin: 0; font-size: 13.5px; font-weight: 700; color: #c084fc; display: flex; align-items: center; gap: 8px;">
+                  <h3 style="margin: 0; font-size: 13.5px; font-weight: 600; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
                     Pending Membership Requests (<?= count($groupPendingRequests) ?>)
                   </h3>
@@ -3373,7 +3374,8 @@ $popularGroups = $conn->execute_query("
           <?php foreach ($groupNotices as $gn): ?>
             <a href="index.php?group=<?= $selected_group_id ?>&notice=<?= (int)$gn['id'] ?>" class="recent-discussion-item" style="text-decoration: none; align-items: flex-start; gap: 8px;">
               <div class="recent-discussion-left" style="min-width: 0; gap: 10px; flex: 1; align-items: flex-start;">
-                <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(29, 155, 240, 0.12); color: var(--primary-blue); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;">
+                <!-- Announcement icon — neutral background -->
+                <div style="width: 32px; height: 32px; border-radius: 8px; background: var(--bg-widget); border: 1px solid var(--border-color); color: var(--text-muted); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                     <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                     <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>

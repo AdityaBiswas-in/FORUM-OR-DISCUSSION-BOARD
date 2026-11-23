@@ -191,11 +191,11 @@ $mobileSearchVal = trim($_GET['q'] ?? '');
       <?php if (function_exists('is_admin') && is_admin()): ?>
       <!-- Admin Console -->
       <a href="index.php?view=admin" class="mobile-drawer-item <?= (isset($_GET['view']) && $_GET['view'] === 'admin') ? 'active' : '' ?>" onclick="closeMobileDrawer()">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #38bdf8;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
         </svg>
-        <span style="font-weight: 700; color: #38bdf8;">Admin Console</span>
-        <span class="mobile-drawer-pill-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">Admin</span>
+        <span style="font-weight: 600;">Admin Console</span>
+        <span class="mobile-drawer-pill-badge">Admin</span>
       </a>
       <?php endif; ?>
 
@@ -226,7 +226,7 @@ $mobileSearchVal = trim($_GET['q'] ?? '');
           <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
         </svg>
         <span>Announcements</span>
-        <span class="mobile-drawer-pill-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8;">Official</span>
+        <!-- "Official" badge removed — label alone is clear enough -->
       </a>
 
       <!-- Quick Discussion Composer -->
