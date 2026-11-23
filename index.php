@@ -1322,18 +1322,6 @@ if ($current_view === 'announcements' && $selected_group_id <= 0) {
     $groupNotices = $conn->execute_query($gnSql, $gnParams)->fetch_all(MYSQLI_ASSOC);
 }
 
-// Latest campus announcements for feed spotlight
-$latestCampusNotices = [];
-if (empty($current_view) && $selected_group_id <= 0 && $single_post_id <= 0 && empty($single_notice_id)) {
-    $lcnSql = "
-        SELECT gn.id, gn.group_id, gn.headline, gn.created_at, g.name as group_name
-        FROM group_notices gn
-        JOIN groups g ON gn.group_id = g.id
-        WHERE g.status != 'private' OR ? = 1
-        ORDER BY gn.created_at DESC LIMIT 3
-    ";
-    $latestCampusNotices = $conn->execute_query($lcnSql, [is_admin() ? 1 : 0])->fetch_all(MYSQLI_ASSOC);
-}
 
 // If viewing Admin Console
 
@@ -2874,22 +2862,6 @@ $popularGroups = $conn->execute_query("
           </div>
         <?php endif; ?>
       <?php else: ?>
-
-        <!-- Campus Pinned Announcement Spotlight (Mobile & Desktop) -->
-        <?php if (!empty($latestCampusNotices)): ?>
-          <div class="home-pinned-announcement-strip">
-            <div class="home-announcement-badge">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-              <span>Campus Announcement</span>
-            </div>
-            <div class="home-announcement-body">
-              <a href="index.php?group=<?= (int)$latestCampusNotices[0]['group_id'] ?>&notice=<?= (int)$latestCampusNotices[0]['id'] ?>" class="home-announcement-link">
-                <strong>[<?= e($latestCampusNotices[0]['group_name']) ?>]</strong> <?= e($latestCampusNotices[0]['headline']) ?>
-              </a>
-            </div>
-            <a href="index.php?view=announcements" class="home-announcement-all" title="View all campus announcements">All &rarr;</a>
-          </div>
-        <?php endif; ?>
 
         <!-- HOME FEED COMPOSER -->
         <?php if ($currentUser && !empty($userJoinedGroups)): ?>
