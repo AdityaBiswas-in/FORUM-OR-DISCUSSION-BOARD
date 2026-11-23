@@ -1,3 +1,7 @@
 # Images folder
 images/
 assets/images/
+
+# Local agent skills and configs
+.agent/
+.agents/
