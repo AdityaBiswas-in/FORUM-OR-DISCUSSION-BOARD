@@ -1642,7 +1642,7 @@ function applyVisualFormat(editor, formatType) {
   });
 });
 
-// Click listener for format buttons
+// Click listener for format buttons (use capture phase so ancestor onclick="event.stopPropagation()" doesn't block it)
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.format-btn');
   if (!btn) return;
@@ -1707,7 +1707,7 @@ document.addEventListener('click', (e) => {
     textarea.focus();
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
   }
-});
+}, true);
 
 // Synchronize rich-editor elements on input, keyup, paste, and blur
 document.addEventListener('input', (e) => {

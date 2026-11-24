@@ -2748,9 +2748,9 @@ $popularGroups = $conn->execute_query("
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                 <span>Edit Group</span>
               </button>
-              <button type="button" class="btn-admin-action" onclick="openAddNoticeModal(<?= $selected_group_id ?>, 'index.php?group=<?= $selected_group_id ?>')" title="Post group announcement">
+              <button type="button" class="btn-admin-action" onclick="openAddNoticeModal(<?= $selected_group_id ?>, 'index.php?group=<?= $selected_group_id ?>')" title="Post group announcement" style="color: var(--primary-blue); border-color: rgba(29, 155, 240, 0.35); background: var(--primary-blue-light);">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-                <span>+ Announcement</span>
+                <span>New Announcement</span>
               </button>
               <?php if (($currentGroup['status'] ?? '') === 'private'): ?>
                 <a href="index.php?action=toggle_group_status&group_id=<?= $selected_group_id ?>&status=public&redirect=<?= urlencode("index.php?group=$selected_group_id") ?>" class="btn-admin-action btn-admin-ok" title="Make group public so anyone can view and join">
