@@ -4,6 +4,12 @@
 
 ---
 
+## Home Page Preview
+
+![Quaddit Home Page Preview](./docs/home-preview.jpg)
+
+---
+
 ## About the Website
 
 Quaddit brings together structured subject communities and clean thread-based conversations in a responsive interface that works across desktop and mobile devices, with support for both dark and light themes.
