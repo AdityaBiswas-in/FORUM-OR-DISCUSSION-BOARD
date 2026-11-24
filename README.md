@@ -32,6 +32,7 @@
 Quaddit uses a three-column desktop forum layout (navigation sidebar, central feed/thread workspace, and contextual right sidebar) paired with a sticky mobile top bar, bottom navigation bar, and slide-out drawer.
 
 Key architectural characteristics observed directly in the codebase:
+
 - **Zero external frameworks**: Pure procedural/modular PHP (`db.php`, `index.php`, `profile.php`, `login.php`, `register.php`) and dependency-free ES6+ JavaScript (`assets/js/main.js`).
 - **Role-separated account tables bridged to a unified relational user table**: Registration and login store credentials in `students` or `admins`, while `login_user_session()` synchronizes the active account into `users` so posts, replies, memberships, bans, and announcements share clean foreign-key relationships.
 - **Database-backed media**: Uploaded avatars, profile banners, group icons, post images, and reply images are converted server-side to Base64 data URIs and stored in `LONGTEXT` columns.
@@ -44,20 +45,20 @@ All screenshots below were captured directly from the live local Quaddit instanc
 
 > **Note:** Authenticated-only views (such as the Admin Console) are not pictured because unauthenticated access is blocked by server-side session and role checks (`is_admin()`).
 
-| Homepage Feed | Community Groups Directory |
-| :---: | :---: |
-| ![Quaddit Homepage](./assets/screenshots/homepage.png) | ![Quaddit Groups Directory](./assets/screenshots/groups.png) |
-| *Three-column layout with search bar, discussion feed, community widget, and dark theme.* | *Public, Private, and Restricted group cards with live search and join/request actions.* |
+|                                       Homepage Feed                                       |                                Community Groups Directory                                |
+| :---------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------: |
+|                  ![Quaddit Homepage](./assets/screenshots/homepage.png)                   |               ![Quaddit Groups Directory](./assets/screenshots/groups.png)               |
+| _Three-column layout with search bar, discussion feed, community widget, and dark theme._ | _Public, Private, and Restricted group cards with live search and join/request actions._ |
 
-| Individual Group Discussion Page | Discussion Post & Reply Interface |
-| :---: | :---: |
-| ![Quaddit Group Discussion Page](./assets/screenshots/group-discussion.png) | ![Quaddit Post and Reply Interface](./assets/screenshots/post-interface.png) |
-| *Group header, pinned posts, membership gating prompt, and group announcements sidebar.* | *Expanded discussion thread showing formatted inline code, view counter, and nested replies.* |
+|                             Individual Group Discussion Page                             |                               Discussion Post & Reply Interface                               |
+| :--------------------------------------------------------------------------------------: | :-------------------------------------------------------------------------------------------: |
+|       ![Quaddit Group Discussion Page](./assets/screenshots/group-discussion.png)        |         ![Quaddit Post and Reply Interface](./assets/screenshots/post-interface.png)          |
+| _Group header, pinned posts, membership gating prompt, and group announcements sidebar._ | _Expanded discussion thread showing formatted inline code, view counter, and nested replies._ |
 
-| User Profile Page | Authentication Portal |
-| :---: | :---: |
-| ![Quaddit User Profile](./assets/screenshots/user-profile.png) | ![Quaddit Login Portal](./assets/screenshots/authentication.png) |
-| *Profile banner, avatar, bio, join date, and tabbed Posts / Replies / Community views.* | *Role-aware sign-in portal with Student and Admin tabs and password visibility toggle.* |
+|                                    User Profile Page                                    |                                  Authentication Portal                                  |
+| :-------------------------------------------------------------------------------------: | :-------------------------------------------------------------------------------------: |
+|             ![Quaddit User Profile](./assets/screenshots/user-profile.png)              |            ![Quaddit Login Portal](./assets/screenshots/authentication.png)             |
+| _Profile banner, avatar, bio, join date, and tabbed Posts / Replies / Community views._ | _Role-aware sign-in portal with Student and Admin tabs and password visibility toggle._ |
 
 ---
 
@@ -77,12 +78,14 @@ All screenshots below were captured directly from the live local Quaddit instanc
 ## User Features
 
 ### Public Visitors (Unauthenticated)
+
 - Browse public discussions on the home feed (`index.php`), search discussions by keyword (`?q=`), and view Recent Discussions.
 - Browse the Community directory (`index.php?view=groups`) and read threads inside **Public** and **Restricted** groups.
 - View user profiles (`profile.php?id=<user_id>`), including authored posts and replies in public groups.
 - **Gating**: Unauthenticated visitors cannot create posts, write replies, join groups, or view **Private** group discussions; attempting protected actions redirects to `register.php`.
 
 ### Registered Users (Members)
+
 - **Registration & Login** (`register.php`, `login.php`, `logout.php`):
   - Register with full name, email, and password (validated for uniqueness across role tables; auto-generates a unique 10-digit ID).
   - Sign in via email or 10-digit ID with optional `Remember me` cookie (`campus_remember`).
@@ -132,16 +135,16 @@ Admin privileges are verified server-side via `is_admin()` (`$_SESSION['account_
 
 ## Technology Stack
 
-| Layer | Technology | Usage in Project |
-| --- | --- | --- |
-| **Markup** | HTML5 | Semantic templates in `index.php`, `profile.php`, `login.php`, `register.php`, `includes/mobile-nav.php` |
-| **Styling** | CSS3 (Grid, Flexbox, Custom Properties) | Responsive 3-column layout, mobile drawer, dark/light theme tokens (`assets/css/style.css`, `assets/css/auth.css`) |
-| **Client Scripting** | Vanilla JavaScript (ES6+) | `contenteditable` WYSIWYG toolbar, modals, image preview strips, client-side filtering & pagination (`assets/js/main.js`) |
-| **Server Runtime** | PHP 8.2+ | Request routing, form/file handling, session management, HTML sanitization, Markdown/rich-text rendering |
-| **Database** | MySQL / MariaDB (InnoDB, `utf8mb4`) | Relational storage for accounts, groups, memberships, requests, bans, notices, posts, images, and replies |
-| **Database Driver** | PHP `mysqli` | Parameterized queries via `$conn->execute_query()` and `$conn->prepare()` |
-| **Web Server** | Apache HTTP Server (XAMPP) | Local PHP execution and static asset serving |
-| **Version Control** | Git & GitHub | Branch history, collaboration, and repository hosting |
+| Layer                | Technology                              | Usage in Project                                                                                                          |
+| -------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **Markup**           | HTML5                                   | Semantic templates in `index.php`, `profile.php`, `login.php`, `register.php`, `includes/mobile-nav.php`                  |
+| **Styling**          | CSS3 (Grid, Flexbox, Custom Properties) | Responsive 3-column layout, mobile drawer, dark/light theme tokens (`assets/css/style.css`, `assets/css/auth.css`)        |
+| **Client Scripting** | Vanilla JavaScript (ES6+)               | `contenteditable` WYSIWYG toolbar, modals, image preview strips, client-side filtering & pagination (`assets/js/main.js`) |
+| **Server Runtime**   | PHP 8.2+                                | Request routing, form/file handling, session management, HTML sanitization, Markdown/rich-text rendering                  |
+| **Database**         | MySQL / MariaDB (InnoDB, `utf8mb4`)     | Relational storage for accounts, groups, memberships, requests, bans, notices, posts, images, and replies                 |
+| **Database Driver**  | PHP `mysqli`                            | Parameterized queries via `$conn->execute_query()` and `$conn->prepare()`                                                 |
+| **Web Server**       | Apache HTTP Server (XAMPP)              | Local PHP execution and static asset serving                                                                              |
+| **Version Control**  | Git & GitHub                            | Branch history, collaboration, and repository hosting                                                                     |
 
 ---
 
@@ -177,6 +180,7 @@ flowchart LR
 ```
 
 ### Layer Responsibilities
+
 - **Presentation Tier**: Renders responsive HTML, toggles dark/light themes, manages the `contenteditable` formatting toolbar, builds client-side image previews, and handles admin table filtering/pagination without page reloads.
 - **Application Tier**: `db.php` initializes timezone (`Asia/Kolkata`), PHP sessions, MySQLi connection, escaping (`e()`), rich-text sanitization/rendering (`render_rich_formatted_text()`), and role helpers (`is_logged_in()`, `is_admin()`, `is_faculty()`, `is_student()`). `index.php` and `profile.php` handle POST/GET actions and template rendering; `thread.php` and `reply.php` resolve direct permalinks.
 - **Data & Storage Tier**: MySQL InnoDB tables enforce referential integrity with `ON DELETE CASCADE` and `ON DELETE SET NULL`. Uploaded images are validated via `finfo`/`mime_content_type` and stored as Base64 data URIs in `LONGTEXT` columns alongside static icons/logos under `assets/images/`.
@@ -250,19 +254,19 @@ flowchart LR
 
 The live `Quaddit` database contains **11 InnoDB tables** (10 defined in `schema.sql` plus `group_notices` also ensured by `db.php`, and `group_bans` used for per-group user bans):
 
-| Table | Purpose | Key Columns | PK | Foreign Keys | Unique / Indexes |
-| --- | --- | --- | --- | --- | --- |
-| **`students`** | Student/user login credentials and profile defaults | `id` (`varchar(10)`), `name`, `email`, `password`, `avatar`, `banner_url`, `bio`, `created_at` | `id` | — | `UNIQUE(email)` |
-| **`admins`** | Administrator login credentials and profile defaults | `id` (`varchar(10)`), `name`, `email`, `password`, `avatar`, `banner_url`, `bio`, `created_at` | `id` | — | `UNIQUE(email)` |
-| **`users`** | Unified relational identity bridge for all forum entities | `id` (`int`), `uid` (`varchar(10)`), `name`, `username`, `email`, `password`, `role`, `account_type`, `avatar`, `banner_url`, `bio`, `created_at` | `id` | — | `UNIQUE(uid)`, `UNIQUE(email)`, `INDEX(role)` |
-| **`groups`** | Topic/subject discussion hubs | `id`, `name`, `description`, `image_url`, `status` (`public`/`private`/`restricted`/`active`), `created_by`, `created_at` | `id` | `created_by -> users(id)` (`ON DELETE SET NULL`) | `INDEX(status)`, `INDEX(created_by)` |
-| **`group_members`** | Tracks active members in each group | `id`, `group_id`, `user_id`, `joined_at` | `id` | `group_id -> groups(id)`, `user_id -> users(id)` (`ON DELETE CASCADE`) | `UNIQUE(group_id, user_id)` |
-| **`group_requests`** | Pending join requests for private groups | `id`, `group_id`, `user_id`, `created_at` | `id` | `group_id -> groups(id)`, `user_id -> users(id)` (`ON DELETE CASCADE`) | `UNIQUE(group_id, user_id)` |
-| **`group_bans`** | Per-group ban records enforced on join and posting | `id`, `group_id`, `user_id`, `banned_by`, `created_at` | `id` | Logical links to `groups(id)` & `users(id)` | `UNIQUE(group_id, user_id)` |
-| **`group_notices`** | Admin announcements scoped to groups | `id`, `group_id`, `user_id`, `headline`, `message`, `created_at` | `id` | `group_id -> groups(id)`, `user_id -> users(id)` (`ON DELETE CASCADE` in `schema.sql`) | `INDEX(group_id)` |
-| **`posts`** | Discussion threads published in groups | `id`, `user_id`, `group_id`, `title`, `content`, `views`, `is_pinned`, `created_at`, `updated_at` | `id` | `user_id -> users(id)`, `group_id -> groups(id)` (`ON DELETE CASCADE`) | `INDEX(user_id)`, `INDEX(group_id)`, `INDEX(created_at)` |
-| **`post_images`** | Multiple image attachments per post | `id`, `post_id`, `image_url`, `created_at` | `id` | `post_id -> posts(id)` (`ON DELETE CASCADE`) | `INDEX(post_id)` |
-| **`replies`** | Top-level and nested replies on posts | `id`, `post_id`, `user_id`, `parent_id`, `content`, `image_url`, `created_at`, `updated_at` | `id` | `post_id -> posts(id)`, `user_id -> users(id)`, `parent_id -> replies(id)` (`ON DELETE CASCADE`) | `INDEX(post_id)`, `INDEX(user_id)`, `INDEX(parent_id)` |
+| Table                | Purpose                                                   | Key Columns                                                                                                                                       | PK   | Foreign Keys                                                                                     | Unique / Indexes                                         |
+| -------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| **`students`**       | Student/user login credentials and profile defaults       | `id` (`varchar(10)`), `name`, `email`, `password`, `avatar`, `banner_url`, `bio`, `created_at`                                                    | `id` | —                                                                                                | `UNIQUE(email)`                                          |
+| **`admins`**         | Administrator login credentials and profile defaults      | `id` (`varchar(10)`), `name`, `email`, `password`, `avatar`, `banner_url`, `bio`, `created_at`                                                    | `id` | —                                                                                                | `UNIQUE(email)`                                          |
+| **`users`**          | Unified relational identity bridge for all forum entities | `id` (`int`), `uid` (`varchar(10)`), `name`, `username`, `email`, `password`, `role`, `account_type`, `avatar`, `banner_url`, `bio`, `created_at` | `id` | —                                                                                                | `UNIQUE(uid)`, `UNIQUE(email)`, `INDEX(role)`            |
+| **`groups`**         | Topic/subject discussion hubs                             | `id`, `name`, `description`, `image_url`, `status` (`public`/`private`/`restricted`/`active`), `created_by`, `created_at`                         | `id` | `created_by -> users(id)` (`ON DELETE SET NULL`)                                                 | `INDEX(status)`, `INDEX(created_by)`                     |
+| **`group_members`**  | Tracks active members in each group                       | `id`, `group_id`, `user_id`, `joined_at`                                                                                                          | `id` | `group_id -> groups(id)`, `user_id -> users(id)` (`ON DELETE CASCADE`)                           | `UNIQUE(group_id, user_id)`                              |
+| **`group_requests`** | Pending join requests for private groups                  | `id`, `group_id`, `user_id`, `created_at`                                                                                                         | `id` | `group_id -> groups(id)`, `user_id -> users(id)` (`ON DELETE CASCADE`)                           | `UNIQUE(group_id, user_id)`                              |
+| **`group_bans`**     | Per-group ban records enforced on join and posting        | `id`, `group_id`, `user_id`, `banned_by`, `created_at`                                                                                            | `id` | Logical links to `groups(id)` & `users(id)`                                                      | `UNIQUE(group_id, user_id)`                              |
+| **`group_notices`**  | Admin announcements scoped to groups                      | `id`, `group_id`, `user_id`, `headline`, `message`, `created_at`                                                                                  | `id` | `group_id -> groups(id)`, `user_id -> users(id)` (`ON DELETE CASCADE` in `schema.sql`)           | `INDEX(group_id)`                                        |
+| **`posts`**          | Discussion threads published in groups                    | `id`, `user_id`, `group_id`, `title`, `content`, `views`, `is_pinned`, `created_at`, `updated_at`                                                 | `id` | `user_id -> users(id)`, `group_id -> groups(id)` (`ON DELETE CASCADE`)                           | `INDEX(user_id)`, `INDEX(group_id)`, `INDEX(created_at)` |
+| **`post_images`**    | Multiple image attachments per post                       | `id`, `post_id`, `image_url`, `created_at`                                                                                                        | `id` | `post_id -> posts(id)` (`ON DELETE CASCADE`)                                                     | `INDEX(post_id)`                                         |
+| **`replies`**        | Top-level and nested replies on posts                     | `id`, `post_id`, `user_id`, `parent_id`, `content`, `image_url`, `created_at`, `updated_at`                                                       | `id` | `post_id -> posts(id)`, `user_id -> users(id)`, `parent_id -> replies(id)` (`ON DELETE CASCADE`) | `INDEX(post_id)`, `INDEX(user_id)`, `INDEX(parent_id)`   |
 
 ---
 
@@ -448,9 +452,11 @@ FORUM-OR-DISCUSSION-BOARD/
 ## Installation and Setup
 
 ### Prerequisites
+
 - [XAMPP](https://www.apachefriends.org/) (or standalone **Apache 2.4+**, **PHP 8.2+**, and **MySQL 8.0+ / MariaDB**).
 
 ### Steps
+
 1. Clone or place the repository into your web server root (e.g., `C:\xampp\htdocs\FORUM-OR-DISCUSSION-BOARD`).
 2. Start **Apache** and **MySQL** from the XAMPP Control Panel.
 3. Open **phpMyAdmin** (`http://localhost/phpmyadmin/`), go to **Import**, and import [`schema.sql`](./schema.sql).
@@ -497,6 +503,7 @@ $conn->query("SET time_zone = '+05:30'");
 ## Security Considerations
 
 ### Implemented Protections
+
 - **Parameterized SQL Queries**: Queries across `index.php`, `profile.php`, `login.php`, `register.php`, and `db.php` use `execute_query()` / prepared statements to defend against SQL injection.
 - **Output Escaping & Sanitization**: Plain text output is escaped with `e()` (`htmlspecialchars(..., ENT_QUOTES, 'UTF-8')`), while rich-text HTML is filtered in `render_rich_formatted_text()` to allow only safe formatting tags (`<b>`, `<strong>`, `<i>`, `<em>`, `<u>`, `<s>`, `<h3>`, `<ul>`, `<ol>`, `<li>`, `<code>`, `<a>`, etc.) and safe link protocols (`https://`, `http://`, `/`).
 - **Password Hashing**: Account registration hashes passwords with `password_hash($password, PASSWORD_BCRYPT)` and verifies them via `password_verify()`.
@@ -504,6 +511,7 @@ $conn->query("SET time_zone = '+05:30'");
 - **Upload Validation**: Uploaded images are inspected via `finfo`/`mime_content_type()` before Base64 encoding.
 
 ### Notes for Production Hardening
+
 - **Move secrets & DB credentials out of tracked source**: Database credentials in `db.php` and the hardcoded admin registration key (`QUAD-ADMIN-2026`) in `register.php` should be moved into environment variables before deploying publicly.
 - **Remove development/diagnostic conveniences**: `login.php` includes a development `"Instant Sign In"` (`bypass`) flow and a legacy plaintext password fallback on student login; `test_auth_visibility.php` is a diagnostic script. Both should be disabled or removed in production.
 - **CSRF Protection**: State-changing GET/POST links (such as delete/ban/approve actions) currently rely on session authentication; adding CSRF tokens would further harden state-changing actions.
@@ -521,7 +529,7 @@ $conn->query("SET time_zone = '+05:30'");
 
 ## Contributors
 
-| Contributor | Contribution |
-| --- | --- |
-| **Aditya Biswas** (`AdityaBiswas-in`) | Core backend logic, database features, UI/UX design, mobile responsiveness, rich-text editor, moderation, and announcements |
-| **Prithviraj Pati** (`PRITHVIRAJ PATI`) | Frontend styling, feed updates, and initial documentation | Repository initialization, pull request integration, and project coordination |
+| Contributor                             | Contribution                                                                                                                |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **Aditya Biswas** (`AdityaBiswas-in`)   | Core backend logic, database features, UI/UX design, mobile responsiveness, rich-text editor, moderation, and announcements |
+| **Prithviraj Pati** (`PRITHVIRAJ PATI`) | Frontend styling, feed updates, and initial documentation                                                                   | Repository initialization, pull request integration, and project coordination |
