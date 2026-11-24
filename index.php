@@ -2505,12 +2505,33 @@ $popularGroups = $conn->execute_query("
           <div style="background: #14171a; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 22px 24px; box-shadow: 0 4px 18px rgba(0,0,0,0.25);">
 
             <!-- Reddish Section Heading (matching phpBB reference) -->
-            <div style="font-size: 16.5px; font-weight: 700; color: #f43f5e; margin-bottom: 24px; letter-spacing: -0.01em; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <div style="font-size: 16.5px; font-weight: 700; color: #f43f5e; margin-bottom: <?= is_admin() ? '16px' : '24px' ?>; letter-spacing: -0.01em; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
               <span><?= (!empty($selected_group_id) && !empty($currentGroup)) ? 'Latest ' . e($currentGroup['name']) . ' Announcements' : 'All Campus Announcements' ?></span>
               <?php if (!empty($groupNotices)): ?>
                 <span style="font-size: 12px; font-weight: 600; color: #94a3b8;"><?= count($groupNotices) ?> <?= count($groupNotices) === 1 ? 'entry' : 'entries' ?></span>
               <?php endif; ?>
             </div>
+
+            <?php if (is_admin()): ?>
+              <!-- Admin-only Search Filter -->
+              <form method="GET" action="index.php" style="display: flex; align-items: center; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;">
+                <input type="hidden" name="view" value="announcements">
+                <?php if (!empty($selected_group_id)): ?>
+                  <input type="hidden" name="group" value="<?= (int)$selected_group_id ?>">
+                <?php endif; ?>
+                <div style="position: relative; flex: 1; min-width: 200px;">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; left: 11px; top: 50%; transform: translateY(-50%); pointer-events: none;">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                  </svg>
+                  <input type="text" name="q" value="<?= e($search_query ?? '') ?>" placeholder="Search announcements by title, message, or group..." style="width: 100%; padding: 8px 12px 8px 34px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.12); background: var(--bg-input); color: var(--text-main); font-size: 13px; outline: none;">
+                </div>
+                <button type="submit" style="padding: 8px 16px; border-radius: 8px; border: none; background: var(--primary-blue); color: #ffffff; font-size: 13px; font-weight: 600; cursor: pointer;">Search</button>
+                <?php if (!empty($search_query)): ?>
+                  <a href="index.php?view=announcements<?= !empty($selected_group_id) ? '&group=' . (int)$selected_group_id : '' ?>" style="padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.12); color: #94a3b8; font-size: 13px; text-decoration: none;">Clear</a>
+                <?php endif; ?>
+              </form>
+            <?php endif; ?>
 
             <!-- Announcements List -->
             <?php if (empty($groupNotices)): ?>
