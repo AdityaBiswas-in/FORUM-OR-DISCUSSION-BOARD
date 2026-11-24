@@ -524,5 +524,4 @@ $conn->query("SET time_zone = '+05:30'");
 | Contributor | Contribution |
 | --- | --- |
 | **Aditya Biswas** (`AdityaBiswas-in`) | Core backend logic, database features, UI/UX design, mobile responsiveness, rich-text editor, moderation, and announcements |
-| **EMON56GIF** | Frontend styling, feed updates, and initial documentation |
-| **Prithviraj Pati** (`PRITHVIRAJ PATI`) | Repository initialization, pull request integration, and project coordination |
+| **Prithviraj Pati** (`PRITHVIRAJ PATI`) | Frontend styling, feed updates, and initial documentation | Repository initialization, pull request integration, and project coordination |
