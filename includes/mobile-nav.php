@@ -218,7 +218,8 @@ $mobileSearchVal = trim($_GET['q'] ?? '');
         <span>Community</span>
       </a>
 
-      <!-- Campus Announcements -->
+      <?php if (function_exists('is_admin') && is_admin()): ?>
+      <!-- Campus Announcements (Admin only) -->
       <a href="index.php?view=announcements" class="mobile-drawer-item <?= (isset($_GET['view']) && $_GET['view'] === 'announcements') ? 'active' : '' ?>" onclick="closeMobileDrawer()">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
@@ -228,6 +229,7 @@ $mobileSearchVal = trim($_GET['q'] ?? '');
         <span>Announcements</span>
         <!-- "Official" badge removed — label alone is clear enough -->
       </a>
+      <?php endif; ?>
 
       <!-- Quick Discussion Composer -->
       <button type="button" class="mobile-drawer-item mobile-drawer-post-btn" onclick="closeMobileDrawer(); handleMobilePostClick();">
